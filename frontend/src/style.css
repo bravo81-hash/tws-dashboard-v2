@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* These are the colors for the default LIGHT MODE */
+:root {
+  --background: 0 0% 100%; /* White */
+  --foreground: 222.2 84% 4.9%; /* Dark Gray */
+  --border: 214.3 31.8% 91.4%; /* Light Gray */
+
+  --primary: 222.2 47.4% 11.2%; /* Dark Blue */
+  --primary-foreground: 210 40% 98%; /* Light Gray */
+
+  --secondary: 210 40% 96.1%; /* Off-white */
+  --secondary-foreground: 222.2 47.4% 11.2%; /* Dark Blue */
+
+  --accent: 217.2 91.2% 59.8%; /* Blue */
+  --accent-foreground: 210 40% 98%; /* Light Gray */
+
+  --positive: 142.1 76.2% 36.3%; /* Green */
+  --negative: 0 84.2% 60.2%; /* Red */
+}
+
+/* These are the colors for the DARK MODE */
+.dark {
+  --background: 222.2 84% 4.9%; /* Dark Gray */
+  --foreground: 210 40% 98%; /* Light Gray */
+  --border: 217.2 32.6% 17.5%; /* Darker Gray */
+
+  --primary: 210 40% 98%; /* Light Gray */
+  --primary-foreground: 222.2 47.4% 11.2%; /* Dark Blue */
+
+  --secondary: 217.2 32.6% 17.5%; /* Darker Gray */
+  --secondary-foreground: 210 40% 98%; /* Light Gray */
+
+  --accent: 217.2 91.2% 59.8%; /* Blue */
+  --accent-foreground: 210 40% 98%; /* Light Gray */
+
+  --positive: 150 70% 50%; /* Brighter Green */
+  --negative: 0 70% 55%; /* Brighter Red */
+}
