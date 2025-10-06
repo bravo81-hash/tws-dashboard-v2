@@ -59,6 +59,23 @@ class Surface3DResponse(BaseModel):
     time_axis: List[int]
     pnl_surface: List[List[float]] # A 2D array (list of lists) of P&L values
 
+# backend/models.py
+
+# ... (keep all existing models and imports) ...
+
+# NEW: Pydantic models for the advanced analytics endpoint
+class ExpiryAnalytics(BaseModel):
+    expiry: str
+    dte: int
+    expected_move: float
+
+class TickerAnalyticsResponse(BaseModel):
+    iv_rank: float
+    iv_percentile: float
+    expiries: List[ExpiryAnalytics]
+
+# --- Helper Functions ---
+# ... (find_breakevens function is unchanged) ...
 # --- Helper Functions ---
 # ... (find_breakevens function is unchanged) ...
 
