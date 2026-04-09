@@ -55,6 +55,12 @@
 - [x] Fix spread entry-cost sign logic in `POST /get_builder_profile` (SELL credits correctly reduce net debit)
 - [x] Add adaptive/dense builder price axis to improve narrow-spread breakeven precision
 - [x] Add deterministic regression coverage for builder spread metrics (`tests/test_builder_profile_endpoint.py`)
+- [x] Fix non-`SPX` expiry loading in `GET /get_expiries` (qualify underlying for all symbols + retry secdef with `conId=0` fallback)
+- [x] Add thread-safe IB request-id allocation to reduce async request-map collision risk
+- [x] Correct index qualification exchange mappings (`RUT -> RUSSELL`, `NDX -> NASDAQ`, `XSP -> CBOE`)
+- [x] Fix index option-chain contract detail requests by using `SMART` option exchange
+- [x] Reorder builder ladder columns to strike-centered call/put market-depth layout
+- [x] Add deterministic expiry-endpoint tests for fallback + index-mapping behavior (`tests/test_get_expiries_endpoint.py`)
 
 ## Active Next Slices
 

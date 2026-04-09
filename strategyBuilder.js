@@ -21,6 +21,7 @@ let builderState = {
     accounts: []
 };
 let builderChart = null;
+const BUILDER_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function s(id) { return document.getElementById(id); }
 function formatNum(v,d=2) { return (typeof v === 'number' && !isNaN(v)) ? v.toFixed(d) : '---';}
@@ -37,9 +38,50 @@ function parseNum(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function formatCompactCount(value) {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) return '—';
+    const abs = Math.abs(parsed);
+    if (abs >= 1_000_000) return `${(parsed / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000) return `${(parsed / 1_000).toFixed(2)}K`;
+    return `${Math.round(parsed)}`;
+}
+
 function finitePositive(value) {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseBuilderExpiryDate(expiryRaw) {
+    const expiry = String(expiryRaw || '').trim();
+    if (!/^\d{8}$/.test(expiry)) return null;
+    const year = Number.parseInt(expiry.slice(0, 4), 10);
+    const month = Number.parseInt(expiry.slice(4, 6), 10) - 1;
+    const day = Number.parseInt(expiry.slice(6, 8), 10);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    return new Date(year, month, day, 17, 0, 0, 0);
+}
+
+function calculateBuilderDte(expiryRaw) {
+    const expiryDate = parseBuilderExpiryDate(expiryRaw);
+    if (!expiryDate) return null;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const dte = Math.ceil((expiryDate - new Date()) / msPerDay);
+    return Math.max(0, Number.isFinite(dte) ? dte : 0);
+}
+
+function formatBuilderExpiryLabel(expiryRaw) {
+    const expiry = String(expiryRaw || '').trim();
+    const expiryDate = parseBuilderExpiryDate(expiry);
+    if (!expiryDate) return expiry;
+
+    const day = String(expiryDate.getDate()).padStart(2, '0');
+    const month = BUILDER_MONTH_NAMES[expiryDate.getMonth()] || '---';
+    const year = String(expiryDate.getFullYear()).slice(2);
+    const dte = calculateBuilderDte(expiry);
+    const dteText = dte == null ? '— DTE' : `${dte} DTE`;
+
+    return `${day}-${month}-${year} (${dteText})`;
 }
 
 function getLegQuoteForPriceSource(opt) {
@@ -271,7 +313,10 @@ async function onBuilderSearch() {
 
 function populateExpiryDropdown(expiries) {
     const select = s('builder-expiry-select');
-    select.innerHTML = '<option value="">— Select Expiry —</option>' + expiries.map(x => `<option value="${x}">${x}</option>`).join('');
+    const sorted = (expiries || []).map((value) => String(value)).sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">— Select Expiry —</option>' + sorted
+        .map((expiry) => `<option value="${expiry}">${formatBuilderExpiryLabel(expiry)}</option>`)
+        .join('');
     builderState.selectedExpiry = '';
 }
 
@@ -356,7 +401,7 @@ function buildChainStatusMessage(rows, meta) {
 }
 
 async function loadOptionChain(symbol, expiry, strikeHalfWidth = 10) {
-    setBuilderStatus(`Loading chain for ${symbol} ${expiry}...`);
+    setBuilderStatus(`Loading chain for ${symbol} ${formatBuilderExpiryLabel(expiry)}...`);
     try {
         const width = Math.max(2, Math.min(30, Number.parseInt(strikeHalfWidth, 10) || 10));
         const res = await fetch(`${API_BASE_URL}/option_chain?symbol=${encodeURIComponent(symbol)}&expiry=${encodeURIComponent(expiry)}&strike_half_width=${encodeURIComponent(width)}`);
@@ -426,28 +471,34 @@ function renderChainTable(rows) {
     }
 
     const header = `<table><thead><tr>
-        <th class="text-right">C Bid</th>
+        <th class="text-right">C Vol</th>
+        <th class="text-right">C OI</th>
         <th class="text-right">C Ask</th>
-        <th class="text-right">C Mid</th>
-        <th class="text-center">Call</th>
+        <th class="text-right">C Bid</th>
+        <th class="text-center">C Side</th>
+        <th class="text-right">C Δ</th>
         <th class="text-center">Strike</th>
-        <th class="text-center">Put</th>
-        <th class="text-left">P Mid</th>
+        <th class="text-left">P Δ</th>
+        <th class="text-center">P Side</th>
         <th class="text-left">P Bid</th>
         <th class="text-left">P Ask</th>
+        <th class="text-left">P OI</th>
+        <th class="text-left">P Vol</th>
         </tr></thead><tbody>`;
     
     let body = filteredRows.map(r => {
         const call = r.call || {}; 
         const put = r.put || {};
         const isAtm = r.strike === atmStrike;
+        const callVol = formatCompactCount(call.volume);
+        const callOi = formatCompactCount(call.open_interest ?? call.oi);
+        const putVol = formatCompactCount(put.volume);
+        const putOi = formatCompactCount(put.open_interest ?? put.oi);
         return `<tr class="${isAtm ? 'builder-ladder-atm' : ''}">
-            <td class="text-right">${formatNum(call.bid)}</td>
+            <td class="text-right">${callVol}</td>
+            <td class="text-right">${callOi}</td>
             <td class="text-right">${formatNum(call.ask)}</td>
-            <td class="text-right font-semibold">
-                ${formatNum(call.mid)}
-                <div class="text-[9px] text-muted mt-0.5">Δ ${formatNum(call.delta, 3)} | IV ${formatNum((call.iv || 0) * 100, 1)}%</div>
-            </td>
+            <td class="text-right">${formatNum(call.bid)}</td>
             <td class="text-center">
                 <div class="flex items-center justify-center gap-2">
                     <button class="builder-side-buy px-1" onclick="addBuilderLeg('BUY','C',${r.strike})">B</button>
@@ -455,7 +506,15 @@ function renderChainTable(rows) {
                 </div>
                 <div class="mt-0.5">${formatQuoteSourceBadge(call)}</div>
             </td>
+            <td class="text-right font-semibold">
+                ${formatNum(call.delta, 3)}
+                <div class="text-[9px] text-muted mt-0.5">IV ${formatNum((call.iv || 0) * 100, 1)}%</div>
+            </td>
             <td class="text-center font-semibold text-primary">${r.strike.toFixed(2)}</td>
+            <td class="text-left font-semibold">
+                ${formatNum(put.delta, 3)}
+                <div class="text-[9px] text-muted mt-0.5">IV ${formatNum((put.iv || 0) * 100, 1)}%</div>
+            </td>
             <td class="text-center">
                 <div class="flex items-center justify-center gap-2">
                     <button class="builder-side-buy px-1" onclick="addBuilderLeg('BUY','P',${r.strike})">B</button>
@@ -463,12 +522,10 @@ function renderChainTable(rows) {
                 </div>
                 <div class="mt-0.5">${formatQuoteSourceBadge(put)}</div>
             </td>
-            <td class="text-left font-semibold">
-                ${formatNum(put.mid)}
-                <div class="text-[9px] text-muted mt-0.5">Δ ${formatNum(put.delta, 3)} | IV ${formatNum((put.iv || 0) * 100, 1)}%</div>
-            </td>
             <td class="text-left">${formatNum(put.bid)}</td>
             <td class="text-left">${formatNum(put.ask)}</td>
+            <td class="text-left">${putOi}</td>
+            <td class="text-left">${putVol}</td>
         </tr>`;
     }).join('');
     container.innerHTML = header + body + '</tbody></table>';

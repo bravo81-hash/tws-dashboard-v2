@@ -336,8 +336,9 @@ def build_expiry_lookup_contract(symbol):
         "SPX": "CBOE",
         "SPXW": "CBOE",
         "VIX": "CBOE",
-        "RUT": "SMART",
-        "NDX": "SMART",
+        "RUT": "RUSSELL",
+        "NDX": "NASDAQ",
+        "XSP": "CBOE",
     }
     if normalized in index_exchange_map:
         contract.secType = "IND"
@@ -345,12 +346,22 @@ def build_expiry_lookup_contract(symbol):
     return contract
 
 
+def allocate_request_id(ib_client):
+    if ib_client is None:
+        raise ValueError("IB client is required")
+    allocator = getattr(ib_client, "allocate_req_id", None)
+    if callable(allocator):
+        return int(allocator())
+    req_id = int(getattr(ib_client, "next_req_id"))
+    ib_client.next_req_id = req_id + 1
+    return req_id
+
+
 def maybe_qualify_underlying_conid(ib_client, contract, timeout_sec=10):
     if not ib_client or not contract:
         return None
 
-    req_id = ib_client.next_req_id
-    ib_client.next_req_id += 1
+    req_id = allocate_request_id(ib_client)
     event = threading.Event()
     ib_client.req_map[req_id] = {
         "event": event,
@@ -760,6 +771,7 @@ class IBKRApp(EWrapper, EClient):
     def __init__(self):
         EClient.__init__(self, self)
         self.next_req_id = 1
+        self._req_id_lock = threading.Lock()
         self.next_order_id = 1
         self.account_summary_req_id = None
         self.req_map = {}
@@ -770,8 +782,15 @@ class IBKRApp(EWrapper, EClient):
         self.hist_req_map = {}
         self.eod_fallback_inflight = set()
 
+    def allocate_req_id(self):
+        with self._req_id_lock:
+            req_id = int(self.next_req_id)
+            self.next_req_id += 1
+        return req_id
+
     def nextValidId(self, orderId: int):
-        self.next_req_id = orderId
+        with self._req_id_lock:
+            self.next_req_id = int(orderId)
         self.next_order_id = orderId
         print("✅ TWS API Connected. Requesting initial positions list...")
         self.reqPositions()
@@ -786,8 +805,7 @@ class IBKRApp(EWrapper, EClient):
             return
         if self.account_summary_req_id is not None:
             return
-        req_id = self.next_req_id
-        self.next_req_id += 1
+        req_id = self.allocate_req_id()
         self.account_summary_req_id = req_id
         tags = ",".join(
             [
@@ -990,8 +1008,7 @@ class IBKRApp(EWrapper, EClient):
                 uc.currency = "USD"
                 uc.secType = "IND" if symbol in ["SPX", "VIX"] else "STK"
                 uc.exchange = "CBOE" if symbol in ["SPX", "VIX"] else "SMART"
-                req_id = self.next_req_id
-                self.next_req_id += 1
+                req_id = self.allocate_req_id()
                 underlying_mkt_reqs[symbol] = req_id
                 self.req_map[req_id] = symbol
                 self.reqMktData(req_id, uc, "106", False, False, [])
@@ -1294,8 +1311,7 @@ class IBKRApp(EWrapper, EClient):
                     und.exchange = "CBOE"
                 else:
                     und.secType = "STK"
-                hist_id = self.next_req_id
-                self.next_req_id += 1
+                hist_id = self.allocate_req_id()
                 self.hist_req_map[hist_id] = ("und", conId)
                 query_time = (datetime.now() - timedelta(days=1)).strftime(
                     "%Y%m%d 23:59:59"
@@ -1322,8 +1338,7 @@ class IBKRApp(EWrapper, EClient):
                 opt.conId = conId
                 opt.exchange = "SMART"
                 opt.currency = "USD"
-                hist_id2 = self.next_req_id
-                self.next_req_id += 1
+                hist_id2 = self.allocate_req_id()
                 self.hist_req_map[hist_id2] = ("opt", conId)
                 query_time = (datetime.now() - timedelta(days=1)).strftime(
                     "%Y%m%d 23:59:59"
@@ -1473,15 +1488,13 @@ def process_request_queue():
 
             # print(f"Processing request queue for ConId: {conId} ({leg['description']})")
 
-            pnl_req_id = ib_app.next_req_id
-            ib_app.next_req_id += 1
+            pnl_req_id = allocate_request_id(ib_app)
             ib_app.req_map[pnl_req_id] = conId
             # print(f"  Requesting PnL (ReqId: {pnl_req_id})")
             api_gate.wait()
             ib_app.reqPnLSingle(pnl_req_id, leg["account"], "", conId)
 
-            mkt_req_id = ib_app.next_req_id
-            ib_app.next_req_id += 1
+            mkt_req_id = allocate_request_id(ib_app)
             ib_app.req_map[mkt_req_id] = conId
             genericTickList = "100,101,104,106"
             # print(f"  Requesting Market Data (ReqId: {mkt_req_id}, Ticks: {genericTickList})")
@@ -1630,8 +1643,7 @@ def place_order():
 
             temp_contract = Contract()
             temp_contract.conId = conId
-            req_id = ib_app.next_req_id
-            ib_app.next_req_id += 1
+            req_id = allocate_request_id(ib_app)
             event = threading.Event()
             ib_app.req_map[req_id] = {"event": event, "contract": None}
 
@@ -1693,8 +1705,7 @@ def place_order():
                 if conId not in qualified_contracts:
                     temp_contract = Contract()
                     temp_contract.conId = conId
-                    req_id = ib_app.next_req_id
-                    ib_app.next_req_id += 1
+                    req_id = allocate_request_id(ib_app)
                     event = threading.Event()
                     ib_app.req_map[req_id] = {"event": event, "contract": None}
 
@@ -1816,42 +1827,68 @@ def get_expiries():
 
     contract = build_expiry_lookup_contract(symbol)
     underlying_con_id = 0
-    if contract.secType == "IND":
-        qualified_con_id = maybe_qualify_underlying_conid(ib_app, contract)
-        if qualified_con_id:
-            underlying_con_id = int(qualified_con_id)
-            print(
-                f"--> Using qualified underlying conId {underlying_con_id} for {symbol}"
-            )
-        else:
-            print(
-                f"⚠️ Proceeding without qualified underlying conId for {symbol}; falling back to 0."
-            )
+    qualified_con_id = maybe_qualify_underlying_conid(ib_app, contract)
+    if qualified_con_id:
+        underlying_con_id = int(qualified_con_id)
+        print(
+            f"--> Using qualified underlying conId {underlying_con_id} for {symbol}"
+        )
+    else:
+        print(
+            f"⚠️ Proceeding without qualified underlying conId for {symbol}; falling back to 0."
+        )
 
-    req_id = ib_app.next_req_id
-    ib_app.next_req_id += 1
-    event = threading.Event()
-    ib_app.req_map[req_id] = {
-        "event": event,
-        "expirations": set(),
-        "strikes": set(),
-        "req_type": "opt_params",
-    }
+    def fetch_expiries_for_conid(con_id, timeout_sec):
+        req_id_local = allocate_request_id(ib_app)
+        event_local = threading.Event()
+        ib_app.req_map[req_id_local] = {
+            "event": event_local,
+            "expirations": set(),
+            "strikes": set(),
+            "req_type": "opt_params",
+        }
 
-    print(f"--> Requesting option parameters for {symbol} (req_id={req_id})")
-    api_gate.wait()
-    ib_app.reqSecDefOptParams(
-        req_id,
-        contract.symbol,
-        "",
-        contract.secType,
-        underlying_con_id,
-    )
+        print(
+            f"--> Requesting option parameters for {symbol} (req_id={req_id_local}, conId={int(con_id or 0)})"
+        )
+        api_gate.wait()
+        ib_app.reqSecDefOptParams(
+            req_id_local,
+            contract.symbol,
+            "",
+            contract.secType,
+            int(con_id or 0),
+        )
+
+        timed_out_local = not event_local.wait(timeout=timeout_sec)
+        req_data_local = ib_app.req_map.pop(req_id_local, {})
+        expirations_local = sorted(
+            {
+                str(value).strip()
+                for value in req_data_local.get("expirations", set())
+                if str(value).strip()
+            }
+        )
+        return req_id_local, expirations_local, timed_out_local
 
     wait_timeout = 30 if contract.secType == "IND" else 20
-    timed_out = not event.wait(timeout=wait_timeout)
-    req_data = ib_app.req_map.pop(req_id, {})
-    expirations = sorted(list(req_data.get("expirations", set())))
+    req_id, expirations, timed_out = fetch_expiries_for_conid(
+        underlying_con_id, wait_timeout
+    )
+
+    if not expirations and underlying_con_id > 0:
+        print(
+            f"⚠️ No expirations returned for {symbol} using conId {underlying_con_id}; retrying with conId 0."
+        )
+        retry_req_id, retry_expirations, retry_timed_out = fetch_expiries_for_conid(
+            0, wait_timeout
+        )
+        if retry_expirations:
+            req_id = retry_req_id
+            expirations = retry_expirations
+            timed_out = retry_timed_out
+        else:
+            timed_out = timed_out and retry_timed_out
 
     if timed_out and not expirations:
         print(f"Timeout fetching expirations for {symbol} (req_id={req_id})")
@@ -1880,8 +1917,7 @@ def get_expiries():
         und_contract.exchange = contract.exchange
         und_contract.currency = "USD"
 
-        und_req_id = ib_app.next_req_id
-        ib_app.next_req_id += 1
+        und_req_id = allocate_request_id(ib_app)
         ib_app.req_map[und_req_id] = symbol
 
         api_gate.wait()
@@ -1915,7 +1951,7 @@ def get_expiries():
 
 @app.route("/option_chain", methods=["GET"])
 def get_option_chain():
-    symbol = request.args.get("symbol")
+    symbol = str(request.args.get("symbol") or "").strip().upper()
     expiry = request.args.get("expiry")
     strike_half_width = int(safe_float(request.args.get("strike_half_width"), 10))
     strike_half_width = max(2, min(strike_half_width, 30))
@@ -1954,8 +1990,7 @@ def get_option_chain():
             f"Using cached contract details for {symbol} {expiry} ({len(contracts_details)} contracts)."
         )
     else:
-        req_id = ib_app.next_req_id
-        ib_app.next_req_id += 1
+        req_id = allocate_request_id(ib_app)
         event = threading.Event()
         ib_app.req_map[req_id] = {
             "event": event,
@@ -2027,8 +2062,7 @@ def get_option_chain():
                 "delta": None,
             }
             selected_con_ids.append(c.conId)
-            mkt_req_id = ib_app.next_req_id
-            ib_app.next_req_id += 1
+            mkt_req_id = allocate_request_id(ib_app)
             ib_app.req_map[mkt_req_id] = c.conId
             ib_app.active_chain_reqs.add(mkt_req_id)
             api_gate.wait()
@@ -2080,8 +2114,7 @@ def get_option_chain():
         if contract is None:
             continue
 
-        snapshot_req_id = ib_app.next_req_id
-        ib_app.next_req_id += 1
+        snapshot_req_id = allocate_request_id(ib_app)
         snapshot_event = threading.Event()
         snapshot_entry = {
             "event": snapshot_event,

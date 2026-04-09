@@ -35,7 +35,11 @@ Resume TWS Dashboard modernization from local status files.
 - Strategy Builder workstation has been rebuilt into an OptionNetExplorer-inspired layout with ladder/ticket/staged-legs/payoff sections.
 - Builder spread math fix landed in `POST /get_builder_profile`: SELL credits now offset BUY debits correctly in aggregate entry cost.
 - Builder payoff computation now uses a denser adaptive price axis to improve breakeven accuracy for narrow spreads.
-- Backend tests currently total `42`.
+- `GET /get_expiries` now supports reliable non-`SPX` loading via underlying qualification + secdef retry with `conId=0` fallback when needed.
+- Index qualification mappings are now symbol-specific (`RUT -> RUSSELL`, `NDX -> NASDAQ`, `XSP -> CBOE`) and backed by direct IB API probe evidence.
+- `GET /option_chain` now requests option contracts on `SMART`, fixing `RUT` chain contract lookup.
+- Strategy-builder ladder column order is now strike-centered with call/put volume and OI columns aligned to the requested workstation flow.
+- Backend tests currently total `45`.
 
 5) Next slice target:
 - Continue risk workspace visual/detail parity:

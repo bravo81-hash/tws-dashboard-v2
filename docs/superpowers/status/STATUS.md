@@ -1,7 +1,7 @@
 # TWS Dashboard Status
 
 ## Current State
-- Phase: Strategy builder correctness + risk workspace polish in progress
+- Phase: Strategy builder option-chain reliability + risk workspace polish in progress
 - Backend canonical file: `dashboard.py`
 - Frontend canonical file: `dashboardClient.js`
 - Branch/repo: local repo initialized in this folder
@@ -47,6 +47,12 @@
 - Fixed Strategy Builder pricing math for spread entries: SELL leg credits are now applied with correct sign in aggregate net cost.
 - Improved builder breakeven/curve precision by switching to an adaptive dense builder price axis (anchors include spot + strikes).
 - Added deterministic regression coverage for builder spread metrics (`tests/test_builder_profile_endpoint.py`) to lock in net cost / max profit / max loss correctness.
+- Fixed strategy-builder expiry loading for non-`SPX` symbols by qualifying underlying `conId` for all symbols and retrying secdef with `conId=0` when qualified lookup returns no expiries.
+- Added thread-safe request-id allocation (`allocate_req_id` + shared helper) across asynchronous IB requests to avoid request-map collisions/timeouts.
+- Corrected index lookup exchanges for expiry qualification (`RUT -> RUSSELL`, `NDX -> NASDAQ`, `XSP -> CBOE`) based on direct IB API probing.
+- Fixed index option-chain contract-detail lookup by requesting option contracts on `SMART` exchange (resolves `RUT` chain loading).
+- Reordered strategy-builder option ladder columns to strike-centered call/put ordering with volume and open-interest fields aligned to workstation view expectations.
+- Added deterministic endpoint regression coverage for expiry lookup behavior and fallback paths (`tests/test_get_expiries_endpoint.py`).
 
 ## In Progress
 - None.
@@ -59,7 +65,7 @@
 ## Verification Evidence
 - `python3 -m py_compile dashboard.py runtime.py combo_schema.py valuation.py routes.py client_portal_adapter.py` passed.
 - `node --check dashboardClient.js && node --check strategyBuilder.js` passed.
-- `python3 -m unittest discover -s tests -p 'test_*.py'` passed (`42` tests).
+- `python3 -m unittest discover -s tests -p 'test_*.py'` passed (`45` tests).
 - Risk modal layout guardrails now enforce bounded dimensions (`#risk-modal-content`, `.risk-chart-shell`, `#risk-chart-canvas`) to prevent runaway popup growth.
 - Risk chart now uses numeric x-series points for robust ATM/breakeven annotation placement and top-axis percentage labels.
 - Profile actions now route into the dedicated risk tab (`Risk Workspace`) instead of opening a popup modal.
@@ -71,6 +77,8 @@
 - `GET /get_portfolio_risk_digest` returns account-level SGPV/NetLiq summary and expiring-soon option alerts.
 - `POST /get_builder_profile` now returns correct debit/credit spread entry cost math (SELL credits offset BUY debits instead of inflating cost basis).
 - `POST /get_builder_profile` now uses a dense adaptive price range so narrow-spread breakevens are resolved accurately.
+- `GET /get_expiries` live checks for `SPX`, `RUT`, `SPY`, `IWM` returned `200` with expiries.
+- `GET /option_chain` live checks for `SPX`, `RUT`, `SPY`, `IWM` returned `200` with populated rows at selected expiry.
 - Client Portal adapter tests now cover `account_risk_context` parsing path and disabled fallback behavior.
 - Flask test client checks:
   - `GET /health` -> `200`

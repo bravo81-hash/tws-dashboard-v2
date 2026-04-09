@@ -129,6 +129,59 @@
         .tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; }
         .tab-btn:hover { color: var(--text-secondary); border-color: var(--bg-hover); }
         .tab-btn.active { border-color: var(--button-primary-bg); color: var(--text-primary); }
+        .header-meta-controls {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+        }
+        .status-banner {
+            display: flex;
+            align-items: center;
+            gap: 0.42rem;
+            min-height: 28px;
+            padding: 0.2rem 0.62rem;
+            border-radius: 0.52rem;
+            border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.01em;
+            line-height: 1.08;
+            font-size: 11px;
+            white-space: nowrap;
+            color: #fff;
+            transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+        }
+        .status-banner::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.62);
+            flex-shrink: 0;
+        }
+        .status-banner.status-connecting {
+            background: color-mix(in srgb, #334155 74%, var(--bg-secondary) 26%);
+            border-color: color-mix(in srgb, #64748b 62%, var(--border-color) 38%);
+        }
+        .status-banner.status-live {
+            background: color-mix(in srgb, #16a34a 82%, #000 18%);
+            border-color: color-mix(in srgb, #16a34a 70%, var(--border-color) 30%);
+        }
+        .status-banner.status-idle {
+            background: color-mix(in srgb, #2563eb 80%, #000 20%);
+            border-color: color-mix(in srgb, #2563eb 70%, var(--border-color) 30%);
+        }
+        .status-banner.status-snapshot {
+            background: color-mix(in srgb, #7c3aed 82%, #000 18%);
+            border-color: color-mix(in srgb, #7c3aed 68%, var(--border-color) 32%);
+        }
+        .status-banner.status-error {
+            background: color-mix(in srgb, #dc2626 82%, #000 18%);
+            border-color: color-mix(in srgb, #dc2626 70%, var(--border-color) 30%);
+        }
 
         #chart-tooltip {
             opacity: 0; position: absolute;
@@ -366,6 +419,41 @@
             border-top: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
             background: color-mix(in srgb, var(--bg-secondary) 86%, #000 14%);
         }
+        .builder-main-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-template-areas:
+                "left"
+                "right"
+                "mid";
+            gap: 0.75rem;
+            align-items: start;
+        }
+        .builder-main-left { grid-area: left; min-width: 0; }
+        .builder-main-right { grid-area: right; min-width: 0; }
+        .builder-main-mid { grid-area: mid; min-width: 0; }
+        .builder-main-mid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+            align-items: start;
+        }
+        .builder-main-mid .builder-pane {
+            display: flex;
+            flex-direction: column;
+        }
+        .builder-main-mid .builder-pane-head {
+            padding: 0.48rem 0.6rem;
+        }
+        .builder-main-mid .builder-pane .p-3 {
+            padding: 0.58rem;
+        }
+        .builder-main-mid #builder-legs-container {
+            max-height: min(27vh, 270px);
+        }
+        .builder-main-right .h-\[360px\] {
+            height: 430px;
+        }
         .builder-pane {
             border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
             border-radius: 0.65rem;
@@ -590,6 +678,31 @@
                 font-size: 11px;
             }
         }
+        @media (min-width: 1180px) {
+            .builder-main-grid {
+                grid-template-columns: minmax(0, 1.13fr) minmax(0, 1fr);
+                grid-template-areas:
+                    "left right"
+                    "mid mid";
+            }
+            .builder-main-mid {
+                grid-template-columns: minmax(250px, 0.7fr) minmax(0, 1.3fr);
+            }
+        }
+        @media (min-width: 1536px) {
+            .builder-main-grid {
+                grid-template-columns: minmax(0, 1.17fr) minmax(0, 1fr);
+            }
+            .builder-main-mid {
+                grid-template-columns: minmax(250px, 0.66fr) minmax(0, 1.34fr);
+            }
+            .builder-main-mid #builder-legs-container {
+                max-height: min(30vh, 320px);
+            }
+            .builder-main-right .h-\[360px\] {
+                height: 470px;
+            }
+        }
         @media (max-width: 1024px) {
             .builder-legs-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -597,6 +710,20 @@
             }
             .builder-legs-grid > div:last-child {
                 justify-self: end;
+            }
+            .builder-main-mid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 768px) {
+            .status-banner {
+                min-height: 24px;
+                padding: 0.16rem 0.5rem;
+                font-size: 10px;
+            }
+            .status-banner::before {
+                width: 5px;
+                height: 5px;
             }
         }
 
@@ -690,25 +817,24 @@
 <body class="dark-mode bg-primary text-primary transition-colors duration-300">
 
     <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-        <header class="my-4 md:my-6 flex justify-between items-center">
+        <header class="my-4 md:my-6 flex justify-between items-start md:items-center gap-3">
             <div>
                 <h1 class="text-2xl md:text-3xl font-bold text-primary">TWS Interactive Dashboard</h1>
                 <p class="text-sm md:text-base text-muted">Real-time risk, combos & PnL monitor</p>
             </div>
-            <!-- Theme Switch moved to header -->
-            <div class="theme-switch-wrapper">
-                <span class="text-sm text-muted mr-2">☀️</span>
-                <label class="theme-switch" for="global-theme-checkbox">
-                    <input type="checkbox" id="global-theme-checkbox" />
-                    <div class="slider round"></div>
-                </label>
-                <span class="text-sm text-muted ml-2">🌙</span>
+            <div class="header-meta-controls">
+                <div id="status-banner" class="status-banner status-connecting">Status: Connecting...</div>
+                <!-- Theme Switch moved to header -->
+                <div class="theme-switch-wrapper">
+                    <span class="text-sm text-muted mr-2">☀️</span>
+                    <label class="theme-switch" for="global-theme-checkbox">
+                        <input type="checkbox" id="global-theme-checkbox" />
+                        <div class="slider round"></div>
+                    </label>
+                    <span class="text-sm text-muted ml-2">🌙</span>
+                </div>
             </div>
         </header>
-
-        <div id="status-banner" class="status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold transition-colors duration-500 bg-red-600 dark:bg-red-700 text-sm md:text-base">
-            Status: Connecting...
-        </div>
 
         <main>
             <div class="mb-4 border-b border-border-color">
@@ -870,8 +996,8 @@
                         </div>
 
                         <div class="p-3 md:p-4">
-                            <div class="grid grid-cols-1 xl:grid-cols-12 gap-3">
-                                <div class="xl:col-span-5 space-y-3">
+                            <div class="builder-main-grid">
+                                <div class="builder-main-left space-y-3">
                                     <div class="grid grid-cols-3 gap-2">
                                         <div class="builder-mini-stat">
                                             <div class="builder-mini-label">Underlying</div>
@@ -895,7 +1021,7 @@
                                     </div>
                                 </div>
 
-                                <div class="xl:col-span-3 space-y-3">
+                                <div class="builder-main-mid">
                                     <div class="builder-pane">
                                         <div class="builder-pane-head px-3 py-2 flex items-center justify-between">
                                             <span>Trade Ticket</span>
@@ -921,7 +1047,7 @@
                                     </div>
                                 </div>
 
-                                <div class="xl:col-span-4 space-y-3">
+                                <div class="builder-main-right space-y-3">
                                     <div class="builder-pane">
                                         <div class="builder-pane-head px-3 py-2">Payoff & Greeks</div>
                                         <div class="p-3 space-y-3">

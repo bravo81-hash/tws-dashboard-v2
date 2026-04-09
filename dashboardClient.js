@@ -637,15 +637,13 @@ async function fetchInitialData() {
             updateInterval = setInterval(updateData, 2000);
         } else {
             console.log("Snapshot mode detected."); // Add log
-            banner.textContent = `Status: Displaying portfolio snapshot from file. Live connection is off.`;
-            banner.className = 'status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold bg-purple-600 text-sm md:text-base';
+            setStatusBannerState('snapshot', 'Status: Displaying portfolio snapshot from file. Live connection is off.');
             document.getElementById('save-snapshot-btn').style.display = 'none';
             document.getElementById('refresh-btn').style.display = 'none';
         }
     } catch(e) {
         console.error("Initial fetch failed:", e);
-        banner.textContent = 'Status: Disconnected.';
-        banner.className='status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold bg-red-600 text-sm md:text-base';
+        setStatusBannerState('error', 'Status: Disconnected.');
         setTimeout(fetchInitialData, 5000);
     }
 }
@@ -1368,14 +1366,20 @@ function filterLegsTable() {
      if(selectAll) selectAll.checked = false;
 }
 
+function setStatusBannerState(state, text) {
+    const banner = document.getElementById('status-banner');
+    if (!banner) return;
+    banner.textContent = text;
+    banner.className = `status-banner status-${state}`;
+}
+
 function updateStatusBanner() {
     const t = Object.keys(portfolioData).length; const b = document.getElementById('status-banner'); if(!b) return;
     const isSnapshot = Object.values(portfolioData).some(p => p.status === 'Snapshot');
-    if (isSnapshot) { b.textContent = `Status: Displaying snapshot. Live connection off.`; b.className = 'status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold bg-purple-600 text-sm md:text-base'; return; }
-    if (t === 0) { b.textContent = 'Status: Connected. No positions found.'; b.className = 'status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold bg-blue-600 dark:bg-blue-700 text-sm md:text-base'; return; }; // Added dark mode class
+    if (isSnapshot) { setStatusBannerState('snapshot', 'Status: Displaying snapshot. Live connection off.'); return; }
+    if (t === 0) { setStatusBannerState('idle', 'Status: Connected. No positions found.'); return; }
     const l = Object.values(portfolioData).filter(p => p.status && p.status.startsWith('Live')).length;
-    b.textContent = `Status: Connected. Live data for ${l} / ${t} positions.`;
-    b.className = 'status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold bg-green-600 dark:bg-green-700 text-sm md:text-base'; // Added dark mode class
+    setStatusBannerState('live', `Status: Connected. Live data for ${l} / ${t} positions.`);
 }
 
 function toggleSelectAllCombos(e) {
