@@ -6,3 +6,5 @@ __pycache__/
 .uv-bin/
 .uv-tools/
 .ruff_cache/
+
+references/
