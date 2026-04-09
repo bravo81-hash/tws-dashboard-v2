@@ -1,0 +1,44 @@
+[
+    {
+        "name": "JUNE.EOM.3.ALLANTIS(130/160) - 2 LOTS",
+        "group": "ALLANTIS (130/160)",
+        "createdAt": "2026-02-27T10:12:06.524Z",
+        "legs": [
+            {
+                "conId": 793178382,
+                "qty": 2.0,
+                "status": "open",
+                "costBasis": null,
+                "realizedPnl": 0.0
+            },
+            {
+                "conId": 800404937,
+                "qty": -4.0,
+                "status": "open",
+                "costBasis": null,
+                "realizedPnl": 0.0
+            },
+            {
+                "conId": 793178671,
+                "qty": 2.0,
+                "status": "open",
+                "costBasis": null,
+                "realizedPnl": 0.0
+            },
+            {
+                "conId": 820344074,
+                "qty": -2.0,
+                "status": "open",
+                "costBasis": null,
+                "realizedPnl": 0.0
+            },
+            {
+                "conId": 851294219,
+                "qty": 2.0,
+                "status": "open",
+                "costBasis": null,
+                "realizedPnl": 0.0
+            }
+        ]
+    }
+]

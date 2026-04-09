@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TWS Interactive Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./three.module.js",
+                "three/addons/controls/OrbitControls.js": "./OrbitControls.js",
+                "three/addons/renderers/CSS2DRenderer.js": "./CSS2DRenderer.js"
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+    <style>
+        :root {
+            --bg-primary: #0a111f;
+            --bg-secondary: #111d33;
+            --bg-tertiary: #1b2a45;
+            --bg-hover: #243856;
+            --text-primary: #eef4ff;
+            --text-secondary: #ccd9f0;
+            --text-muted: #8ea2c4;
+            --border-color: #2a3f63;
+            --input-bg: #16243d;
+            --input-border: #35507a;
+            --button-primary-bg: #0ea5e9;
+            --button-primary-hover: #0284c7;
+            --button-secondary-bg: #223453;
+            --button-secondary-hover: #2d4670;
+            --accent-glow: rgba(14, 165, 233, 0.24);
+            --modal-overlay: rgba(2, 9, 20, 0.78);
+        }
+
+        .light-mode {
+            --bg-primary: #f5f8ff;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #edf3fd;
+            --bg-hover: #dfebfb;
+            --text-primary: #12233e;
+            --text-secondary: #27456f;
+            --text-muted: #5d7599;
+            --border-color: #c8d9ee;
+            --input-bg: #ffffff;
+            --input-border: #9eb4d3;
+            --button-primary-bg: #0369a1;
+            --button-primary-hover: #075985;
+            --button-secondary-bg: #dce7f8;
+            --button-secondary-hover: #c8d9ef;
+            --accent-glow: rgba(3, 105, 161, 0.18);
+            --modal-overlay: rgba(46, 86, 140, 0.34);
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
+            background-image:
+                radial-gradient(1200px 580px at 5% -5%, rgba(14, 165, 233, 0.16), transparent 45%),
+                radial-gradient(980px 420px at 92% -10%, rgba(37, 99, 235, 0.14), transparent 45%);
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+        h1, h2, h3 { letter-spacing: -0.02em; }
+        .font-mono, code, pre, .mono { font-family: 'IBM Plex Mono', monospace; }
+        /* Apply base styles using variables */
+        .bg-primary { background-color: var(--bg-primary); }
+        .bg-secondary { background-color: var(--bg-secondary); }
+        .bg-tertiary { background-color: var(--bg-tertiary); }
+        .text-primary { color: var(--text-primary); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-muted { color: var(--text-muted); }
+        .border-border-color { border-color: var(--border-color); }
+        .input-styles {
+             background-color: var(--input-bg);
+             border-color: var(--input-border);
+             color: var(--text-primary);
+        }
+        .input-styles:focus {
+             border-color: var(--button-primary-bg); /* Use button color for focus */
+             box-shadow: 0 0 0 2px var(--accent-glow);
+             outline: none;
+        }
+        .button-primary { background-color: var(--button-primary-bg); color: white; }
+        .button-primary:hover { background-color: var(--button-primary-hover); }
+        .button-secondary { background-color: var(--button-secondary-bg); color: var(--text-primary); }
+        .button-secondary:hover { background-color: var(--button-secondary-hover); }
+        .modal-overlay { background-color: var(--modal-overlay); }
+        .modal-content { background-color: color-mix(in srgb, var(--bg-secondary) 92%, #ffffff 8%); border: 1px solid var(--border-color); color: var(--text-primary); box-shadow: 0 24px 68px rgba(2, 9, 20, 0.45); }
+
+
+        .table-header, .chain-header { position: sticky; top: 0; z-index: 10; background-color: var(--bg-tertiary); }
+        .details-row { background-color: var(--bg-secondary) !important; /* Important needed to override hover potentially */ }
+        .details-row td, .details-row th { border-bottom: 1px solid var(--border-color); }
+        .expand-icon { transition: transform 0.2s; }
+        .expanded .expand-icon { transform: rotate(90deg); }
+        .modal { transition: opacity 0.25s ease; }
+        .tab-panel { animation: panelFade 220ms ease; }
+        #d3-modal-canvas-container canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+        @keyframes panelFade {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        input[type=range] {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 6px; /* Slightly thinner */
+            background: var(--bg-tertiary); outline: none; border-radius: 3px; cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 16px; height: 16px; /* Smaller thumb */
+            background: var(--button-primary-bg); cursor: pointer; border-radius: 50%;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 16px; height: 16px; background: var(--button-primary-bg); cursor: pointer; border-radius: 50%; border: none;
+        }
+
+        .tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; }
+        .tab-btn:hover { color: var(--text-secondary); border-color: var(--bg-hover); }
+        .tab-btn.active { border-color: var(--button-primary-bg); color: var(--text-primary); }
+
+        #chart-tooltip {
+            opacity: 0; position: absolute;
+            background: var(--bg-secondary); backdrop-filter: blur(4px);
+            color: var(--text-primary); border-radius: 6px;
+            padding: 6px 10px; font-size: 11px; /* Smaller */
+            pointer-events: none; transition: opacity 0.1s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid var(--border-color); z-index: 99;
+        }
+        #chart-tooltip table { width: 100%; }
+        #chart-tooltip td { padding: 1px 3px; }
+
+        #risk-modal-content {
+            width: 100%;
+            max-width: none;
+            max-height: none;
+            overflow: visible;
+            display: flex;
+            flex-direction: column;
+        }
+        #risk-modal-content #modal-body {
+            overflow: visible;
+            padding-right: 0;
+        }
+
+        .risk-chart-shell {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            height: clamp(380px, 56vh, 730px);
+            min-height: 380px;
+            border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background:
+                radial-gradient(900px 300px at 50% -5%, color-mix(in srgb, var(--button-primary-bg) 22%, transparent), transparent 56%),
+                linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-primary) 28%), var(--bg-primary));
+            box-shadow:
+                inset 0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent),
+                0 16px 42px rgba(2, 10, 24, 0.32);
+        }
+        #risk-chart-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+        .risk-table-scroll {
+            max-height: min(66vh, 760px);
+            overflow: auto;
+        }
+        .risk-matrix-head th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: color-mix(in srgb, var(--bg-tertiary) 90%, #ffffff 10%);
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            min-width: 94px;
+        }
+        .risk-matrix-sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            border-right: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            min-width: 112px;
+        }
+        .risk-matrix-atm-row td {
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, #facc15 45%, transparent);
+        }
+        .risk-matrix-atm-col {
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, #facc15 50%, transparent);
+        }
+        .risk-overlay-panel {
+            position: absolute;
+            top: 10px;
+            z-index: 20;
+            pointer-events: none;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            border-radius: 0.65rem;
+            padding: 0.45rem 0.55rem;
+            backdrop-filter: blur(3px);
+            box-shadow: 0 6px 20px rgba(2, 9, 20, 0.3);
+        }
+        .risk-overlay-left { left: 10px; max-width: min(360px, 46vw); }
+        .risk-overlay-right { right: 10px; max-width: min(320px, 38vw); }
+        .risk-overlay-title {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 10px;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+        }
+        .risk-overlay-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 11px;
+            line-height: 1.2;
+            margin: 0.15rem 0;
+        }
+        .risk-overlay-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 9999px;
+            box-shadow: 0 0 8px currentColor;
+        }
+        .risk-overlay-leg {
+            font-size: 11px;
+            line-height: 1.25;
+            margin: 0.2rem 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        .risk-view-btn {
+            padding: 0.35rem 0.65rem;
+            border: 1px solid var(--border-color);
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .risk-view-btn.active {
+            border-color: color-mix(in srgb, var(--button-primary-bg) 70%, var(--border-color) 30%);
+            background: color-mix(in srgb, var(--button-primary-bg) 28%, var(--bg-secondary) 72%);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--button-primary-bg) 45%, transparent);
+        }
+        .risk-digest-shell {
+            border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            border-radius: 0.7rem;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            padding: 0.75rem;
+        }
+        .risk-digest-pill {
+            border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            border-radius: 0.55rem;
+            background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+            padding: 0.45rem 0.55rem;
+        }
+        .risk-digest-alert-row {
+            display: grid;
+            grid-template-columns: 56px minmax(0, 1fr) 86px;
+            gap: 0.45rem;
+            align-items: center;
+            padding: 0.35rem 0;
+            border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+        }
+        .risk-digest-alert-row:first-child { border-top: none; }
+        .risk-chip {
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+            background: color-mix(in srgb, var(--bg-secondary) 90%, #ffffff 10%);
+            border-radius: 9999px;
+            padding: 0.2rem 0.45rem;
+            color: var(--text-secondary);
+            backdrop-filter: blur(2px);
+        }
+        .risk-strip-card {
+            border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
+            border-radius: 0.55rem;
+            background: color-mix(in srgb, var(--bg-secondary) 82%, #ffffff 18%);
+            padding: 0.3rem 0.45rem;
+            display: grid;
+            grid-template-columns: 120px minmax(0, 1fr);
+            align-items: center;
+            gap: 0.4rem;
+            min-height: 54px;
+        }
+        #risk-greek-strips { grid-template-columns: 1fr !important; gap: 0.35rem !important; }
+        .risk-strip-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.05rem;
+            min-width: 0;
+        }
+        .risk-strip-label {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 10px;
+            font-weight: 700;
+            margin-bottom: 0;
+        }
+        .risk-strip-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .risk-strip-card canvas {
+            width: 100% !important;
+            height: 38px !important;
+            min-height: 38px;
+            max-height: 38px;
+            display: block;
+        }
+        @media (max-width: 1024px) {
+            .risk-overlay-right { display: none; }
+            .risk-overlay-left { max-width: min(92vw, 360px); }
+        }
+
+        .sortable-header { cursor: pointer; user-select: none; }
+        .sortable-header:hover { background-color: var(--bg-hover); }
+        .sort-asc::after { content: ' ▲'; font-size: 0.7em; }
+        .sort-desc::after { content: ' ▼'; font-size: 0.7em; }
+
+        /* Strategy Builder (OptionNetExplorer-style) */
+        .builder-shell {
+            --builder-text-size: clamp(10px, 0.58vw, 12px);
+            --builder-head-size: clamp(9px, 0.5vw, 10px);
+            border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            border-radius: 0.75rem;
+            background:
+                linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, #ffffff 8%), color-mix(in srgb, var(--bg-primary) 88%, #000 12%));
+            box-shadow:
+                inset 0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent),
+                0 16px 40px rgba(2, 9, 20, 0.28);
+            overflow: hidden;
+        }
+        .builder-toolbar {
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            background: color-mix(in srgb, var(--bg-tertiary) 82%, #000 18%);
+        }
+        .builder-status-strip {
+            border-top: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            background: color-mix(in srgb, var(--bg-secondary) 86%, #000 14%);
+        }
+        .builder-pane {
+            border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            border-radius: 0.65rem;
+            background: color-mix(in srgb, var(--bg-secondary) 92%, #ffffff 8%);
+            overflow: hidden;
+        }
+        .builder-pane-head {
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            background: color-mix(in srgb, var(--bg-tertiary) 82%, #000 18%);
+            color: var(--text-secondary);
+            font-size: 11px;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .builder-mini-stat {
+            border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            border-radius: 0.5rem;
+            background: color-mix(in srgb, var(--bg-tertiary) 76%, transparent);
+            padding: 0.35rem 0.45rem;
+        }
+        .builder-mini-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.2rem;
+        }
+        .builder-mini-value {
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--text-primary);
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.1;
+        }
+        .builder-ladder table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--builder-text-size);
+            line-height: 1.05;
+        }
+        .builder-ladder thead th {
+            position: sticky;
+            top: 0;
+            z-index: 4;
+            background: color-mix(in srgb, var(--bg-tertiary) 90%, #000 10%);
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: var(--builder-head-size);
+            padding: 0.36rem 0.4rem;
+        }
+        .builder-ladder td {
+            padding: 0.3rem 0.36rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+            white-space: nowrap;
+        }
+        .builder-ladder tr:hover {
+            background: color-mix(in srgb, var(--bg-hover) 82%, #000 18%);
+        }
+        .builder-ladder-atm {
+            background: color-mix(in srgb, #facc15 20%, transparent);
+        }
+        .builder-side-buy {
+            color: #22c55e;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .builder-side-sell {
+            color: #ef4444;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .builder-legs-grid {
+            display: grid;
+            grid-template-columns: 120px 56px 76px 88px 80px 32px;
+            gap: 0.35rem;
+            align-items: center;
+            padding: 0.38rem 0.48rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--builder-text-size);
+            line-height: 1.05;
+        }
+        .builder-legs-grid-head {
+            background: color-mix(in srgb, var(--bg-tertiary) 84%, #000 16%);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: var(--builder-head-size);
+            position: sticky;
+            top: 0;
+            z-index: 3;
+        }
+        .builder-shell .input-styles {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--builder-text-size);
+            line-height: 1.05;
+            padding: 0.36rem 0.48rem;
+            min-height: 34px;
+        }
+        .builder-shell button {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--builder-text-size);
+            line-height: 1.05;
+            padding: 0.36rem 0.58rem;
+        }
+        .builder-ladder .builder-side-buy,
+        .builder-ladder .builder-side-sell {
+            padding: 0.08rem 0.24rem !important;
+            min-height: auto;
+            line-height: 1;
+            font-size: var(--builder-head-size);
+            border-radius: 0.25rem;
+        }
+        .builder-ladder .text-\[9px\] {
+            font-size: var(--builder-head-size) !important;
+            line-height: 1.05;
+        }
+        #builder-chain-container {
+            max-height: min(72vh, 820px);
+            overflow: auto;
+        }
+        #builder-legs-container {
+            max-height: min(44vh, 480px);
+            overflow: auto;
+        }
+        .builder-shell .text-\[10px\] {
+            font-size: var(--builder-head-size) !important;
+        }
+
+        /* Risk Workspace (OptionNetExplorer-style density) */
+        #risk-panel .risk-workstation {
+            border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+            border-radius: 0.7rem;
+            background:
+                linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, #ffffff 8%), color-mix(in srgb, var(--bg-primary) 90%, #000 10%));
+            box-shadow:
+                inset 0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent),
+                0 14px 36px rgba(2, 10, 24, 0.26);
+            padding: 0.75rem;
+        }
+        #risk-panel .risk-toolbar-dense {
+            border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+            border-radius: 0.55rem;
+            background: color-mix(in srgb, var(--bg-tertiary) 80%, #000 20%);
+            padding: 0.34rem 0.42rem;
+        }
+        #risk-panel .risk-view-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            padding: 0.3rem 0.55rem;
+            border-radius: 0.38rem;
+        }
+        #risk-panel .risk-chart-shell {
+            height: clamp(380px, 56vh, 730px);
+        }
+        #risk-panel #key-metrics,
+        #risk-panel #risk-table-summary,
+        #risk-panel #sgpv-summary {
+            background: color-mix(in srgb, var(--bg-tertiary) 74%, #000 26%);
+            border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+            border-radius: 0.55rem;
+        }
+        #risk-panel #key-metrics > div,
+        #risk-panel #risk-table-summary > div,
+        #risk-panel #sgpv-summary > div {
+            border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+            border-radius: 0.45rem;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            padding: 0.34rem 0.4rem;
+        }
+        #risk-panel #key-metrics .text-xs,
+        #risk-panel #risk-table-summary .text-xs,
+        #risk-panel #sgpv-summary .text-xs {
+            font-size: 10px !important;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        #risk-panel #key-metrics .text-lg,
+        #risk-panel #risk-table-summary .text-lg,
+        #risk-panel #sgpv-summary .text-lg,
+        #risk-panel #key-metrics .font-semibold,
+        #risk-panel #risk-table-summary .font-semibold,
+        #risk-panel #sgpv-summary .font-semibold {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 13px !important;
+            line-height: 1.05;
+        }
+        #risk-panel .risk-table-scroll table {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+        }
+        #risk-panel .risk-table-scroll th,
+        #risk-panel .risk-table-scroll td {
+            padding: 0.34rem 0.42rem !important;
+            line-height: 1.05;
+        }
+        #risk-panel .risk-strip-card {
+            min-height: 48px;
+            padding: 0.24rem 0.42rem;
+            grid-template-columns: 106px minmax(0, 1fr);
+        }
+        #risk-panel .risk-strip-value {
+            font-size: 10px;
+        }
+        #risk-panel #risk-graph-view .input-styles,
+        #risk-panel #risk-table-view .input-styles,
+        #risk-panel #risk-sgpv-view .input-styles,
+        #risk-panel #risk-graph-view button,
+        #risk-panel #risk-table-view button,
+        #risk-panel #risk-sgpv-view button {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            line-height: 1.05;
+        }
+        @media (max-width: 1280px) {
+            .builder-legs-grid {
+                grid-template-columns: 108px 48px 70px 80px 72px 28px;
+                font-size: 11px;
+            }
+        }
+        @media (max-width: 1024px) {
+            .builder-legs-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                row-gap: 0.25rem;
+            }
+            .builder-legs-grid > div:last-child {
+                justify-self: end;
+            }
+        }
+
+        /* Theme Switch */
+        .theme-switch-wrapper { display: flex; align-items: center; }
+        .theme-switch { display: inline-block; height: 22px; position: relative; width: 44px; }
+        .theme-switch input { display:none; }
+        .slider { background-color: var(--bg-hover); bottom: 0; cursor: pointer; left: 0; position: absolute; right: 0; top: 0; transition: .4s; }
+        .slider:before { background-color: #fff; bottom: 3px; content: ""; height: 16px; left: 4px; position: absolute; transition: .4s; width: 16px; }
+        input:checked + .slider { background-color: var(--button-primary-bg); }
+        input:checked + .slider:before { transform: translateX(20px); background-color: #fff;}
+        .slider.round { border-radius: 22px; }
+        .slider.round:before { border-radius: 50%; }
+
+        /* Input Styles */
+        input[type="text"], input[type="number"], select {
+             background-color: var(--input-bg);
+             border: 1px solid var(--input-border);
+             color: var(--text-primary);
+             border-radius: 0.375rem; /* rounded-md */
+             padding: 0.5rem 0.75rem; /* py-2 px-3 */
+             font-size: 0.875rem; /* text-sm */
+             transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, select:focus {
+             border-color: var(--button-primary-bg);
+             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4); /* Tailwind Blue-500 focus ring */
+             outline: none;
+        }
+        /* Checkbox styling */
+         .form-checkbox {
+             border-radius: 0.25rem;
+             border-color: var(--input-border);
+             color: var(--button-primary-bg); /* Check color */
+         }
+         .form-checkbox:focus {
+             border-color: var(--button-primary-bg);
+             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+             outline: none;
+         }
+         /* Tailwind dark mode doesn't style form elements well by default */
+         .dark-mode .form-checkbox {
+              background-color: var(--input-bg);
+              border-color: var(--input-border);
+         }
+
+        /* General Button Styles */
+        button {
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem 1rem; /* py-2 px-4 */
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 600; /* font-semibold */
+            transition: background-color 0.2s;
+            border: none;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Specific Button Types */
+        .btn-primary { background-color: var(--button-primary-bg); color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: var(--button-primary-hover); }
+        .btn-secondary { background-color: var(--button-secondary-bg); color: var(--text-primary); }
+        .btn-secondary:hover:not(:disabled) { background-color: var(--bg-hover); }
+        .btn-danger { background-color: #dc2626; color: white; } /* red-600 */
+        .btn-danger:hover:not(:disabled) { background-color: #b91c1c; } /* red-700 */
+        .btn-success { background-color: #16a34a; color: white; } /* green-600 */
+        .btn-success:hover:not(:disabled) { background-color: #15803d; } /* green-700 */
+        .btn-warning { background-color: #f59e0b; color: white; } /* amber-500 */
+        .btn-warning:hover:not(:disabled) { background-color: #d97706; } /* amber-600 */
+        .btn-link { background: none; padding: 0.25rem 0.5rem; color: var(--button-primary-bg); }
+        .btn-link:hover:not(:disabled) { text-decoration: underline; }
+
+
+        /* Table Compactness */
+        th, td { padding: 0.5rem 0.75rem; /* py-2 px-3 */ }
+        thead th { font-size: 0.75rem; /* text-xs */ }
+        tbody td { font-size: 0.875rem; /* text-sm */ }
+        .details-row td, .details-row th { padding: 0.5rem 0.75rem; } /* Keep details consistent */
+
+        /* Max Height for Table Containers */
+         #legs-table-container, #combos-table-container {
+             max-height: 60vh; /* Adjust as needed */
+             overflow-y: auto;
+         }
+
+    </style>
+</head>
+<!-- Body starts in dark mode, JS will switch if needed -->
+<body class="dark-mode bg-primary text-primary transition-colors duration-300">
+
+    <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+        <header class="my-4 md:my-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-primary">TWS Interactive Dashboard</h1>
+                <p class="text-sm md:text-base text-muted">Real-time risk, combos & PnL monitor</p>
+            </div>
+            <!-- Theme Switch moved to header -->
+            <div class="theme-switch-wrapper">
+                <span class="text-sm text-muted mr-2">☀️</span>
+                <label class="theme-switch" for="global-theme-checkbox">
+                    <input type="checkbox" id="global-theme-checkbox" />
+                    <div class="slider round"></div>
+                </label>
+                <span class="text-sm text-muted ml-2">🌙</span>
+            </div>
+        </header>
+
+        <div id="status-banner" class="status-banner rounded-lg p-3 md:p-4 mb-4 md:mb-6 text-white font-semibold transition-colors duration-500 bg-red-600 dark:bg-red-700 text-sm md:text-base">
+            Status: Connecting...
+        </div>
+
+        <main>
+            <div class="mb-4 border-b border-border-color">
+                <nav class="-mb-px flex space-x-4 md:space-x-6 text-sm md:text-base" aria-label="Tabs">
+                    <button class="tab-btn active whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="portfolio">Portfolio</button>
+                    <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="combos">Custom Combos</button>
+                    <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="risk">Risk Workspace</button>
+                    <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="builder">Strategy Builder</button>
+                </nav>
+            </div>
+
+            <div id="tab-content">
+                <!-- Portfolio Panel -->
+                <section id="portfolio-panel" class="tab-panel bg-secondary rounded-lg shadow-md p-4 md:p-6">
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                        <h2 class="text-xl md:text-2xl font-bold text-primary">My Live Positions</h2>
+                        <div class="flex items-center space-x-2">
+                           <button id="save-snapshot-btn" class="btn-success text-xs md:text-sm">💾 Save Snapshot</button>
+                           <button id="refresh-btn" class="btn-secondary text-xs md:text-sm">🔄 Refresh Positions</button>
+                        </div>
+                    </div>
+
+                    <div id="portfolio-risk-digest" class="risk-digest-shell mb-4">
+                        <div class="text-sm text-muted">Loading portfolio risk digest...</div>
+                    </div>
+
+                    <div id="add-leg-mode-banner" class="hidden mb-4 p-3 md:p-4 bg-blue-100 dark:bg-blue-900/50 border border-blue-300 dark:border-blue-600 rounded-lg">
+                        <div class="flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <p class="font-semibold text-base md:text-lg text-primary">Add Legs Mode</p>
+                                <p id="add-leg-target-combo" class="text-blue-700 dark:text-blue-300 text-sm"></p>
+                            </div>
+                            <div class="flex items-center space-x-2 md:space-x-4">
+                                <button id="confirm-add-legs-btn" class="btn-success text-xs md:text-sm">Add Selected</button>
+                                <button id="cancel-add-legs-btn" class="btn-secondary text-xs md:text-sm">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="create-combo-section" class="mb-4 space-y-4">
+                         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <select id="filter-account" class="input-styles text-sm">
+                                <option value="All">All Accounts</option>
+                            </select>
+                            <input type="text" id="filter-ticker" placeholder="Ticker..." class="input-styles text-sm">
+                            <input type="text" id="filter-expiry" placeholder="Expiry (YYYYMMDD)..." class="input-styles text-sm">
+                            <input type="text" id="filter-strike" placeholder="Strike..." class="input-styles text-sm">
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <input type="text" id="combo-name-input" placeholder="Enter new combo name" class="input-styles text-sm flex-grow min-w-[150px]">
+                            <input type="text" id="combo-group-input" placeholder="Group (optional)" class="input-styles text-sm w-full sm:w-48">
+                            <button id="create-combo-btn" class="btn-primary text-xs md:text-sm w-full sm:w-auto">Create Combo</button>
+                        </div>
+                    </div>
+
+                    <div id="legs-table-container" class="border border-border-color rounded-lg overflow-hidden">
+                        <table class="min-w-full divide-y divide-border-color">
+                            <thead class="bg-tertiary">
+                                <tr>
+                                    <th class="p-2 w-10"><input type="checkbox" id="select-all-checkbox" class="h-4 w-4 rounded form-checkbox"></th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Position</th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Account</th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Qty</th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Daily P&L</th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Unrealized P&L</th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider">Status</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="legs-table-body" class="bg-secondary divide-y divide-border-color"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Combos Panel -->
+                <section id="combos-panel" class="tab-panel hidden bg-secondary rounded-lg shadow-md p-4 md:p-6">
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                        <h2 class="text-xl md:text-2xl font-bold text-primary">My Custom Combos</h2>
+                        <div class="flex items-center space-x-2 md:space-x-4">
+                            <select id="group-filter-select" class="input-styles text-sm"></select>
+                            <input type="text" id="combo-filter-input" placeholder="Filter combos..." class="input-styles text-sm w-40 md:w-auto">
+                        </div>
+                    </div>
+                    <div id="combos-table-container" class="border border-border-color rounded-lg overflow-hidden">
+                        <table class="min-w-full">
+                            <thead class="bg-tertiary">
+                                <tr>
+                                    <th class="p-2 w-10"><input type="checkbox" id="select-all-combos-checkbox" class="h-4 w-4 rounded form-checkbox"></th>
+                                    <th class="p-2 text-left text-xs font-semibold uppercase text-muted tracking-wider sortable-header" id="sort-name">Combo Name</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Cost Basis</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Total Return</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Today's Return</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Delta</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Theta</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Vega</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Gamma</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider sortable-header" id="sort-created">Created</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">DTE</th>
+                                    <th class="p-2 text-center text-xs font-semibold uppercase text-muted tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="combo-aggregation-body" class="divide-y divide-border-color"></tbody>
+                            <tbody id="combos-table-body" class="bg-secondary divide-y divide-border-color"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Builder Panel -->
+                <section id="builder-panel" class="tab-panel hidden bg-secondary rounded-lg shadow-md p-4 md:p-6">
+                    <div class="builder-shell">
+                        <div class="builder-toolbar px-3 py-3 md:px-4">
+                            <div class="flex items-center justify-between gap-2 mb-3">
+                                <div>
+                                    <h2 class="text-xl md:text-2xl font-bold text-primary">Strategy Builder Workstation</h2>
+                                    <p class="text-xs text-muted">Option ladder + trade ticket + payoff, inspired by OptionNetExplorer workflows.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-2 text-sm">
+                                <div class="col-span-2 xl:col-span-2">
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Underlying</label>
+                                    <div class="flex items-center gap-2">
+                                        <input id="builder-symbol-input" placeholder="SPX" class="input-styles w-full">
+                                        <button id="builder-search-btn" class="btn-primary text-xs px-3 py-2">Load</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Account</label>
+                                    <select id="builder-account-select" class="input-styles w-full"><option value="">—</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Expiry</label>
+                                    <select id="builder-expiry-select" class="input-styles w-full"><option value="">—</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Strikes +/-</label>
+                                    <select id="builder-chain-window" class="input-styles w-full"><option value="5">5</option><option value="10" selected>10</option><option value="15">15</option><option value="20">20</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Price Source</label>
+                                    <select id="builder-price-source" class="input-styles w-full"><option value="MID">Mid</option><option value="BID">Bid</option><option value="ASK">Ask</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Quote Quality</label>
+                                    <select id="builder-quote-filter" class="input-styles w-full"><option value="ALL">All</option><option value="LIVE">Live</option><option value="FALLBACK">Fallback</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Offset ($)</label>
+                                    <input type="number" id="builder-offset" step="0.01" value="0" class="input-styles w-full">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Comm/Contract</label>
+                                    <input type="number" id="builder-commission" step="0.01" value="0.65" class="input-styles w-full">
+                                </div>
+                            </div>
+                            <div class="md:hidden mt-2 flex items-center gap-2">
+                                <button id="builder-clear-btn-mobile" class="btn-secondary text-xs flex-1">Clear Ticket</button>
+                                <button id="builder-place-btn-mobile" class="btn-primary text-xs flex-1">Place Order</button>
+                            </div>
+                        </div>
+
+                        <div class="p-3 md:p-4">
+                            <div class="grid grid-cols-1 xl:grid-cols-12 gap-3">
+                                <div class="xl:col-span-5 space-y-3">
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="builder-mini-stat">
+                                            <div class="builder-mini-label">Underlying</div>
+                                            <div id="builder-und-summary" class="builder-mini-value">—</div>
+                                        </div>
+                                        <div class="builder-mini-stat">
+                                            <div class="builder-mini-label">Contracts</div>
+                                            <div id="builder-chain-contracts" class="builder-mini-value">—</div>
+                                        </div>
+                                        <div class="builder-mini-stat">
+                                            <div class="builder-mini-label">Live Coverage</div>
+                                            <div id="builder-chain-coverage" class="builder-mini-value">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="builder-pane">
+                                        <div class="builder-pane-head px-3 py-2 flex items-center justify-between">
+                                            <span>Option Ladder</span>
+                                            <span class="text-[10px] text-muted">Tap B/S to stage legs</span>
+                                        </div>
+                                        <div id="builder-chain-container" class="builder-ladder bg-secondary"></div>
+                                    </div>
+                                </div>
+
+                                <div class="xl:col-span-3 space-y-3">
+                                    <div class="builder-pane">
+                                        <div class="builder-pane-head px-3 py-2 flex items-center justify-between">
+                                            <span>Trade Ticket</span>
+                                            <span class="text-[10px] text-muted">1 combo unit</span>
+                                        </div>
+                                        <div class="p-3 space-y-3">
+                                            <div>
+                                                <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Net Limit Price</label>
+                                                <input type="number" id="builder-limit-price" step="0.01" value="0" class="input-styles w-full">
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                                <button id="builder-clear-btn" class="btn-secondary text-xs">Clear</button>
+                                                <button id="builder-place-btn" class="btn-primary text-xs">Place</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="builder-pane">
+                                        <div class="builder-pane-head px-3 py-2 flex items-center justify-between">
+                                            <span>Staged Legs</span>
+                                            <span class="text-[10px] text-muted">Qty/Strike/Price</span>
+                                        </div>
+                                        <div id="builder-legs-container" class="max-h-[44vh] overflow-auto bg-secondary"></div>
+                                    </div>
+                                </div>
+
+                                <div class="xl:col-span-4 space-y-3">
+                                    <div class="builder-pane">
+                                        <div class="builder-pane-head px-3 py-2">Payoff & Greeks</div>
+                                        <div class="p-3 space-y-3">
+                                            <div id="builder-metrics" class="grid grid-cols-2 gap-2 text-center"></div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label class="flex items-center justify-between text-xs text-muted mb-1"><span>Date Shift</span><span id="builder-date-label" class="font-mono bg-tertiary px-1.5 py-0.5 rounded text-xs">T+0</span></label>
+                                                    <input type="range" id="builder-date-slider" min="0" max="30" step="1" value="0" class="w-full">
+                                                </div>
+                                                <div>
+                                                    <label class="flex items-center justify-between text-xs text-muted mb-1"><span>IV Shift</span><span id="builder-iv-label" class="font-mono bg-tertiary px-1.5 py-0.5 rounded text-xs">+0%</span></label>
+                                                    <input type="range" id="builder-iv-slider" min="-50" max="50" step="1" value="0" class="w-full">
+                                                </div>
+                                            </div>
+                                            <div class="h-[360px] rounded overflow-hidden border border-border-color">
+                                                <canvas id="builder-chart-canvas"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="builder-status-strip px-3 py-2 md:px-4">
+                            <div id="builder-status" class="text-xs md:text-sm text-muted">Load a symbol to begin.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Dedicated Risk Workspace -->
+    <section id="risk-panel" class="tab-panel hidden bg-secondary rounded-lg shadow-md p-4 md:p-6">
+         <div id="risk-modal-content" class="risk-workstation rounded-lg w-full p-0">
+            <div class="flex justify-between items-center mb-2">
+                <h2 id="modal-title" class="text-lg font-semibold text-primary">Risk Profile</h2>
+                <button id="modal-close-btn" class="btn-secondary text-xs md:text-sm">Back To Combos</button>
+            </div>
+            <div id="modal-body" class="space-y-3">
+                <div class="risk-toolbar-dense flex items-center gap-2">
+                    <button id="risk-view-graph-btn" class="risk-view-btn active" type="button">Risk Graph</button>
+                    <button id="risk-view-table-btn" class="risk-view-btn" type="button">Risk Table</button>
+                    <button id="risk-view-sgpv-btn" class="risk-view-btn" type="button">SGPV Sim</button>
+                </div>
+
+                <div id="risk-graph-view" class="space-y-3">
+                    <div id="key-metrics" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-center p-2 rounded-lg bg-tertiary text-sm"></div>
+                    <div class="relative risk-chart-shell">
+                        <canvas id="risk-chart-canvas"></canvas>
+                        <div id="chart-tooltip"></div>
+                        <div id="risk-curve-panel" class="risk-overlay-panel risk-overlay-left"></div>
+                        <div id="risk-legs-panel" class="risk-overlay-panel risk-overlay-right"></div>
+                        <div id="risk-cursor-chips" class="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1.5 pointer-events-none"></div>
+                    </div>
+                    <div class="risk-toolbar-dense grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 p-2 rounded-lg bg-tertiary">
+                        <div>
+                            <div class="flex justify-between items-center text-xs text-muted">
+                                <label for="date-slider">Date Adjustment</label>
+                                <span id="date-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">T+0</span>
+                            </div>
+                            <input type="range" id="date-slider" min="0" max="1" value="0">
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center text-xs text-muted">
+                                <label for="iv-slider">"What-If" IV Change</label>
+                                <div class="flex items-center gap-1">
+                                    <span id="iv-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">+0%</span>
+                                    <button id="iv-reset-btn" title="Reset IV Change" class="text-muted hover:text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5" /><path stroke-linecap="round" stroke-linejoin="round" d="M4 9a9 9 0 0115.8-2.6M20 15a9 9 0 01-15.8 2.6" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <input type="range" id="iv-slider" min="-50" max="50" value="0" step="1">
+                        </div>
+                    </div>
+
+                    <div id="risk-greek-strips" class="grid gap-2">
+                        <div class="risk-strip-card">
+                            <div class="risk-strip-meta"><div class="risk-strip-label">P&L</div><div id="risk-strip-value-pnl" class="risk-strip-value">—</div></div>
+                            <canvas id="risk-strip-pnl"></canvas>
+                        </div>
+                        <div class="risk-strip-card">
+                            <div class="risk-strip-meta"><div class="risk-strip-label">Delta</div><div id="risk-strip-value-delta" class="risk-strip-value">—</div></div>
+                            <canvas id="risk-strip-delta"></canvas>
+                        </div>
+                        <div class="risk-strip-card">
+                            <div class="risk-strip-meta"><div class="risk-strip-label">Theta</div><div id="risk-strip-value-theta" class="risk-strip-value">—</div></div>
+                            <canvas id="risk-strip-theta"></canvas>
+                        </div>
+                        <div class="risk-strip-card">
+                            <div class="risk-strip-meta"><div class="risk-strip-label">WtVega</div><div id="risk-strip-value-wtvega" class="risk-strip-value">—</div></div>
+                            <canvas id="risk-strip-wtvega"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                         <div class="flex items-center flex-wrap gap-x-3 gap-y-1">
+                             <div id="aggregate-greeks" class="flex items-center gap-x-3 border-r border-border-color pr-3"></div>
+                             <div id="aggregate-pnl" class="flex items-center gap-x-3"></div>
+                         </div>
+                        <button id="reset-zoom-btn" class="btn-secondary text-xs">Reset Zoom</button>
+                    </div>
+                </div>
+
+                <div id="risk-table-view" class="hidden space-y-2">
+                    <div class="risk-toolbar-dense flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-tertiary text-xs md:text-sm">
+                        <div class="flex items-center gap-2">
+                            <label for="risk-table-metric" class="text-muted">Metric</label>
+                            <select id="risk-table-metric" class="input-styles text-xs md:text-sm py-1 px-2">
+                                <option value="pnl">P&L</option>
+                                <option value="pnl_pct">P&L %</option>
+                                <option value="delta">Delta</option>
+                                <option value="gamma">Gamma</option>
+                                <option value="theta">Theta</option>
+                                <option value="vega">Vega</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label for="risk-table-range" class="text-muted">Range +/- %</label>
+                            <input id="risk-table-range" type="number" min="1" max="80" step="1" value="5" class="input-styles text-xs md:text-sm py-1 px-2 w-20">
+                            <label for="risk-table-columns" class="text-muted">Columns</label>
+                            <input id="risk-table-columns" type="number" min="3" max="40" step="1" value="20" class="input-styles text-xs md:text-sm py-1 px-2 w-20">
+                            <label for="risk-table-rows" class="text-muted">Rows/Side</label>
+                            <input id="risk-table-rows" type="number" min="2" max="40" step="1" value="10" class="input-styles text-xs md:text-sm py-1 px-2 w-20">
+                            <button id="risk-table-reset-btn" class="btn-secondary text-xs">Reset</button>
+                        </div>
+                    </div>
+                    <div id="risk-table-summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-center p-2 rounded-lg bg-tertiary text-sm"></div>
+                    <div class="border border-border-color rounded-lg overflow-hidden risk-table-scroll">
+                        <table class="min-w-full text-xs md:text-sm">
+                            <thead id="risk-table-head" class="bg-tertiary risk-matrix-head"></thead>
+                            <tbody id="risk-table-body" class="divide-y divide-border-color bg-secondary"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="risk-sgpv-view" class="hidden space-y-3">
+                    <div id="sgpv-summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-center p-2 rounded-lg bg-tertiary text-sm"></div>
+                    <div class="risk-toolbar-dense flex flex-wrap items-end gap-3 p-2 rounded-lg bg-tertiary text-xs md:text-sm">
+                        <div>
+                            <label for="sgpv-account-select" class="block text-muted mb-1">Account</label>
+                            <select id="sgpv-account-select" class="input-styles text-xs md:text-sm py-1 px-2 w-40">
+                                <option value="All">All Accounts</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="sgpv-netliq-input" class="block text-muted mb-1">NetLiq (USD)</label>
+                            <input id="sgpv-netliq-input" type="number" min="1" step="1" class="input-styles text-xs md:text-sm py-1 px-2 w-40">
+                        </div>
+                        <div>
+                            <label for="sgpv-columns-input" class="block text-muted mb-1">Columns</label>
+                            <input id="sgpv-columns-input" type="number" min="3" max="20" step="1" value="6" class="input-styles text-xs md:text-sm py-1 px-2 w-24">
+                        </div>
+                        <div>
+                            <label for="sgpv-range-input" class="block text-muted mb-1">Range +/- %</label>
+                            <input id="sgpv-range-input" type="number" min="5" max="90" step="1" value="55" class="input-styles text-xs md:text-sm py-1 px-2 w-24">
+                        </div>
+                        <button id="sgpv-refresh-btn" class="btn-secondary text-xs md:text-sm">Recompute</button>
+                    </div>
+                    <div id="sgpv-context-note" class="text-xs text-muted px-1"></div>
+                    <div class="relative risk-chart-shell">
+                        <canvas id="sgpv-chart-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+   <!-- 3D Surface Modal -->
+   <div id="d3-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+       <div class="modal-content w-full max-w-6xl p-4 md:p-6 flex flex-col rounded-lg shadow-xl">
+           <div class="flex justify-between items-center mb-4 flex-shrink-0">
+               <h2 id="d3-modal-title" class="text-xl md:text-2xl font-bold text-primary">3D Risk Surface</h2>
+               <div class="flex items-center space-x-3 md:space-x-4">
+                   <select id="surface-selector" class="input-styles text-sm py-1">
+                       <option value="pnl">P&L Surface</option>
+                       <option value="delta">Delta Surface</option>
+                       <option value="gamma">Gamma Surface</option>
+                       <option value="theta">Theta Surface</option>
+                       <option value="vega">Vega Surface</option>
+                   </select>
+                   <button id="d3-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+               </div>
+           </div>
+           <div id="d3-modal-canvas-container" class="flex-grow min-h-[60vh] md:min-h-[70vh] border border-border-color rounded-md bg-primary"></div> <!-- Added bg-primary -->
+       </div>
+   </div>
+
+    <!-- Override/Create Combo Modal -->
+    <div id="override-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content rounded-lg shadow-xl w-full max-w-4xl p-4 md:p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="override-modal-title" class="text-xl md:text-2xl font-bold text-primary">Create Custom Combo</h2>
+                <button id="override-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+            </div>
+            <div id="override-modal-body" class="overflow-auto text-sm"></div>
+            <div class="flex justify-end space-x-2 md:space-x-4 mt-6">
+                <button id="override-modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="override-modal-save-btn" class="btn-primary">Save Combo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Leg Modal -->
+    <div id="close-leg-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content rounded-lg shadow-xl w-full max-w-lg p-4 md:p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl md:text-2xl font-bold text-primary">Close Position Leg</h2>
+                <button id="close-leg-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+            </div>
+            <div class="space-y-4 text-sm">
+                <p id="close-leg-description" class="text-secondary font-semibold"></p>
+                <div>
+                    <label for="close-leg-price" class="block text-xs font-medium text-muted mb-1">Closing Price (per contract)</label>
+                    <input type="number" step="0.01" id="close-leg-price" class="input-styles w-full">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 md:space-x-4 mt-6">
+                <button id="close-leg-modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="close-leg-modal-confirm-btn" class="btn-danger">Confirm Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Leg Modal -->
+    <div id="edit-leg-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content rounded-lg shadow-xl w-full max-w-lg p-4 md:p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl md:text-2xl font-bold text-primary">Edit Leg Details</h2>
+                <button id="edit-leg-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+            </div>
+            <div class="space-y-4 text-sm">
+                <p id="edit-leg-description" class="text-secondary font-semibold"></p>
+                <div>
+                    <label for="edit-leg-qty" class="block text-xs font-medium text-muted mb-1">Quantity</label>
+                    <input type="number" id="edit-leg-qty" class="input-styles w-full">
+                </div>
+                <div>
+                    <label for="edit-leg-cost" class="block text-xs font-medium text-muted mb-1">Cost (per contract)</label>
+                    <input type="number" step="0.01" id="edit-leg-cost" class="input-styles w-full" placeholder="e.g. 1.53 for a debit">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 md:space-x-4 mt-6">
+                <button id="edit-leg-modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="edit-leg-modal-confirm-btn" class="btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Position Modal (Single Leg) -->
+    <div id="close-position-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content rounded-lg shadow-xl w-full max-w-lg p-4 md:p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="close-position-description" class="text-xl md:text-2xl font-bold text-primary">Close Position</h2>
+                <button id="close-position-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+            </div>
+            <div class="space-y-4 text-sm">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="close-order-type" class="block text-xs font-medium text-muted mb-1">Order Type</label>
+                        <select id="close-order-type" class="input-styles w-full">
+                            <option value="LMT">Limit</option>
+                            <option value="MKT">Market</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="close-tif" class="block text-xs font-medium text-muted mb-1">Time in Force</label>
+                        <select id="close-tif" class="input-styles w-full">
+                            <option value="DAY">DAY</option>
+                            <option value="GTC">GTC</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="close-limit-price" class="block text-xs font-medium text-muted mb-1">Limit Price</label>
+                    <input type="number" step="0.01" id="close-limit-price" class="input-styles w-full">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 md:space-x-4 mt-6">
+                <button id="close-position-modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="close-position-modal-confirm-btn" class="btn-danger">Send Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Combo Modal -->
+    <div id="combo-order-modal" class="modal fixed inset-0 modal-overlay flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content rounded-lg shadow-xl w-full max-w-2xl p-4 md:p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="combo-order-modal-title" class="text-xl md:text-2xl font-bold text-primary">Close Combo</h2>
+                <button id="combo-order-modal-close-btn" class="text-muted hover:text-primary text-3xl leading-none">&times;</button>
+            </div>
+            <div id="combo-order-modal-body" class="overflow-auto mb-4 text-sm max-h-60"></div>
+            <div class="space-y-4 text-sm">
+                 <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="combo-order-type" class="block text-xs font-medium text-muted mb-1">Order Type</label>
+                        <select id="combo-order-type" class="input-styles w-full">
+                            <option value="LMT">Limit</option>
+                            <option value="MKT">Market</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="combo-tif" class="block text-xs font-medium text-muted mb-1">Time in Force</label>
+                        <select id="combo-tif" class="input-styles w-full">
+                            <option value="DAY">DAY</option>
+                            <option value="GTC">GTC</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="combo-limit-price" class="block text-xs font-medium text-muted mb-1">Net Limit Price</label>
+                    <div class="flex items-center">
+                        <input type="number" step="0.01" id="combo-limit-price" class="input-styles rounded-r-none w-full">
+                        <span id="combo-price-type" class="bg-tertiary text-secondary px-3 py-2 rounded-r-md font-semibold text-xs border border-l-0 border-border-color">--</span>
+                    </div>
+                    <div id="combo-market-data" class="text-right text-xs mt-1 text-muted"></div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 md:space-x-4 mt-6">
+                <button id="combo-order-modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="combo-order-modal-confirm-btn" class="btn-danger">Send Combo Order</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./dashboardClient.js"></script>
+    <!-- blackscholes.js removed -->
+    <script type="module" src="./strategyBuilder.js"></script>
+</body>
+</html>

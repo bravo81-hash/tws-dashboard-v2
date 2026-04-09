@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Snapshot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .table-header { position: sticky; top: 0; z-index: 10; }
+        .details-row { background-color: #1f2937; }
+        .details-row td { border-bottom: 1px solid #4b5563; }
+        .expand-icon { transition: transform 0.2s; }
+        .expanded .expand-icon { transform: rotate(90deg); }
+        .tab-btn.active { border-color: #3b82f6; color: #eff6ff; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-white">TWS Portfolio Snapshot</h1>
+            <p id="snapshot-date" class="text-gray-400">As of: </p>
+        </header>
+        
+        <main>
+            <div class="mb-4 border-b border-gray-700">
+                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button class="tab-btn active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm" data-tab="positions">
+                        Live Positions
+                    </button>
+                    <button class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500" data-tab="combos">
+                        Custom Combos
+                    </button>
+                </nav>
+            </div>
+
+            <div id="tab-content">
+                <section id="positions-panel" class="tab-panel bg-gray-800 rounded-lg shadow-lg p-6">
+                    <h2 class="text-2xl font-bold text-white mb-4">Individual Positions</h2>
+                    <div class="overflow-y-auto max-h-[60vh] border border-gray-700 rounded-lg">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700 table-header">
+                                <tr>
+                                    <th class="p-3 text-left text-xs font-semibold">Position</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Qty</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Cost Basis</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Market Value</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Unrealized P&L</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Daily P&L</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Delta</th>
+                                    <th class="p-3 text-left text-xs font-semibold">IV</th>
+                                </tr>
+                            </thead>
+                            <tbody id="snapshot-table-body" class="bg-gray-800 divide-y divide-gray-700"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="combos-panel" class="tab-panel hidden bg-gray-800 rounded-lg shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-white">Custom Combos Snapshot</h2>
+                        <div class="flex items-center space-x-4">
+                            <select id="group-filter-select" class="bg-gray-700 text-white rounded-md px-4 py-2 border border-gray-600 text-sm"></select>
+                            <input type="text" id="combo-filter-input" placeholder="Filter combos by name..." class="bg-gray-700 text-white rounded-md px-4 py-2 border border-gray-600 text-sm">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th class="p-3 text-left text-xs font-semibold">Combo Name</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Cost Basis</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Unrealized P&L</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Daily P&L</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Delta</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Theta</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Vega</th>
+                                    <th class="p-3 text-left text-xs font-semibold">Gamma</th>
+                                </tr>
+                            </thead>
+                            <tbody id="combos-table-body" class="bg-gray-800 divide-y divide-gray-700"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let portfolioData, customCombos;
+        try {
+            const portfolioList = _SNAPSHOT_DATA_;
+            portfolioData = Object.fromEntries(portfolioList.map(p => [p.conId, p]));
+            customCombos = _SNAPSHOT_COMBOS_;
+        } catch (e) {
+            console.error("Snapshot data not found or invalid. Initializing with empty data.", e);
+            portfolioData = {};
+            customCombos = [];
+        }
+
+        let expandedCombos = new Set();
+        
+        function formatCurrency(v, s=false) { 
+            if (typeof v !== 'number' || isNaN(v)) return 'N/A'; 
+            const c = v >= 0 ? 'text-green-400' : 'text-red-400'; 
+            const S = v >= 0 && s ? '+' : ''; 
+            return `<span class="${c}">${S}${v.toLocaleString('en-US',{style:'currency',currency:'USD'})}</span>`; 
+        }
+        function coloredGreek(val) {
+            if (typeof val !== 'number' || isNaN(val)) return `<span class="text-gray-400">---</span>`;
+            return `<span class="${val >= 0 ? 'text-green-400' : 'text-red-400'}">${val.toFixed(4)}</span>`;
+        }
+        function formatNumber(v, d=2) {
+            return (typeof v === 'number' && !isNaN(v)) ? v.toFixed(d) : 'N/A';
+        }
+        function formatPnlWithPercent(pnl, costBasis) {
+            if (typeof pnl !== 'number' || isNaN(pnl)) return 'N/A';
+            const pnlString = formatCurrency(pnl, true);
+            const pct = (costBasis && costBasis !== 0) ? (pnl / Math.abs(costBasis)) * 100 : 0;
+            const pctString = `<span class="text-xs text-gray-400"> (${pct.toFixed(1)}%)</span>`;
+            return `${pnlString}${pctString}`;
+        }
+
+        function renderPositionsTable() {
+            const body = document.getElementById('snapshot-table-body');
+            if (!body) return;
+            body.innerHTML = '';
+            
+            Object.values(portfolioData).sort((a,b) => (a.description||'').localeCompare(b.description||'')).forEach(l => {
+                const r = document.createElement('tr');
+                const g = l.greeks || {};
+                const pnl = l.pnl || {};
+                const contract = l.contract || {};
+                const delta = (g.delta || 0) * l.position * (parseFloat(contract.multiplier) || 1);
+
+                r.innerHTML = `
+                    <td class="p-3 whitespace-nowrap">${l.description || 'N/A'}</td>
+                    <td class="p-3">${l.position || 'N/A'}</td>
+                    <td class="p-3">${formatCurrency(l.costBasis)}</td>
+                    <td class="p-3">${formatCurrency(l.marketValue)}</td>
+                    <td class="p-3">${formatCurrency(pnl.unrealized, true)}</td>
+                    <td class="p-3">${formatCurrency(pnl.daily, true)}</td>
+                    <td class="p-3">${formatNumber(delta, 2)}</td>
+                    <td class="p-3">${formatNumber(g.iv, 3)}</td>
+                `;
+                body.appendChild(r);
+            });
+        }
+
+        function getComboLegEntries(combo) {
+            if (Array.isArray(combo.legs)) {
+                return combo.legs
+                    .filter(leg => leg && Number.isInteger(leg.conId))
+                    .map(leg => ({ conId: leg.conId, qty: Number.isFinite(Number(leg.qty)) ? Number(leg.qty) : null }));
+            }
+            if (Array.isArray(combo.legConIds)) {
+                return combo.legConIds
+                    .filter(conId => Number.isInteger(conId))
+                    .map(conId => ({ conId, qty: null }));
+            }
+            return [];
+        }
+
+        function renderCombosTable() {
+            const body = document.getElementById('combos-table-body');
+            const groupFilter = document.getElementById('group-filter-select');
+            const nameFilterInput = document.getElementById('combo-filter-input');
+            if(!body || !groupFilter || !nameFilterInput) return;
+
+            const nameFilter = nameFilterInput.value.toLowerCase();
+            const selectedGroup = groupFilter.value;
+
+            const uniqueGroups = [...new Set(customCombos.map(c => c.group || 'Default'))];
+            const currentFilterValue = groupFilter.value;
+            groupFilter.innerHTML = '<option value="All">All Groups</option>';
+            uniqueGroups.sort().forEach(group => {
+                const isSelected = group === currentFilterValue ? ' selected' : '';
+                groupFilter.innerHTML += `<option value="${group}"${isSelected}>${group}</option>`;
+            });
+
+            body.innerHTML = '';
+            let combosToRender = 0;
+
+            customCombos.forEach((combo, index) => {
+                const group = combo.group || 'Default';
+                const name = combo.name.toLowerCase();
+
+                if (selectedGroup !== 'All' && group !== selectedGroup) return;
+                if (nameFilter && !name.includes(nameFilter)) return;
+
+                combosToRender++;
+                const data = { dailyPnl: 0, unrealizedPnl: 0, delta: 0, theta: 0, vega: 0, gamma: 0, costBasis: 0 };
+                const comboLegEntries = getComboLegEntries(combo);
+                comboLegEntries.forEach(({ conId, qty }) => { 
+                    const leg = portfolioData[conId];
+                    if (leg) { 
+                        const positionQty = qty == null ? (leg.position || 0) : qty;
+                        const ratio = (leg.position || 0) !== 0 ? positionQty / leg.position : 0;
+                        data.unrealizedPnl += (leg.pnl.unrealized || 0) * (qty == null ? 1 : ratio);
+                        data.costBasis += (leg.costBasis || 0) * (qty == null ? 1 : ratio);
+                        const m = parseFloat(leg.contract.multiplier) || 1;
+                        data.delta += (leg.greeks.delta || 0) * positionQty * m;
+                        data.theta += (leg.greeks.theta || 0) * positionQty * m;
+                        data.vega += (leg.greeks.vega || 0) * positionQty * m;
+                        data.gamma += (leg.greeks.gamma || 0) * positionQty * m;
+                        data.dailyPnl += (leg.pnl.daily || 0) * (qty == null ? 1 : ratio);
+                    } 
+                });
+                
+                const r = document.createElement('tr'); 
+                const isExpanded = expandedCombos.has(index);
+                r.className = `combo-row cursor-pointer hover:bg-gray-700 ${isExpanded ? "expanded bg-gray-700" : ""}`;
+                r.onclick = () => toggleComboDetails(index);
+                
+                r.innerHTML = `
+                    <td class="p-3 font-semibold text-white">
+                        <div class="flex items-center">
+                            <svg class="expand-icon w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            ${combo.name}
+                        </div>
+                    </td>
+                    <td class="p-3">${formatCurrency(data.costBasis)}</td>
+                    <td class="p-3">${formatPnlWithPercent(data.unrealizedPnl, data.costBasis)}</td>
+                    <td class="p-3">${formatPnlWithPercent(data.dailyPnl, data.costBasis)}</td>
+                    <td class="p-3">${coloredGreek(data.delta)}</td>
+                    <td class="p-3">${coloredGreek(data.theta)}</td>
+                    <td class="p-3">${coloredGreek(data.vega)}</td>
+                    <td class="p-3">${coloredGreek(data.gamma)}</td>
+                `;
+                body.appendChild(r);
+
+                if (isExpanded) {
+                    const detailsRow = document.createElement('tr'); detailsRow.className = 'details-row';
+                    let detailsHtml = `<td colspan="8" class="p-0"><div class="p-2 bg-gray-900"><table class="min-w-full text-xs"><thead><tr class="text-gray-400"><th class="p-2 text-left">Position</th><th class="p-2 text-left">Qty</th><th class="p-2 text-left">Cost Basis</th><th class="p-2 text-left">Unr. P&L</th><th class="p-2 text-left">Delta</th></tr></thead><tbody>`;
+                    comboLegEntries.forEach(({ conId, qty }) => {
+                        const leg = portfolioData[conId];
+                        if(leg){ 
+                            const m = leg.contract.right ? 100 : 1;
+                            const displayQty = qty == null ? leg.position : qty;
+                            const ratio = (leg.position || 0) !== 0 ? displayQty / leg.position : 0;
+                            const legDelta = (leg.greeks.delta || 0) * displayQty * m;
+                            const legCostBasis = (leg.costBasis || 0) * (qty == null ? 1 : ratio);
+                            const legUnrealized = (leg.pnl.unrealized || 0) * (qty == null ? 1 : ratio);
+                            detailsHtml += `<tr class="border-t border-gray-700"><td class="p-2">${leg.description}</td><td class="p-2">${displayQty}</td><td class="p-2">${formatCurrency(legCostBasis)}</td><td class="p-2">${formatCurrency(legUnrealized, true)}</td><td class="p-2">${formatNumber(legDelta)}</td></tr>`; 
+                        } 
+                    });
+                    detailsHtml += '</tbody></table></div></td>'; 
+                    detailsRow.innerHTML = detailsHtml; 
+                    body.appendChild(detailsRow);
+                }
+            });
+
+            if (combosToRender === 0) {
+                body.innerHTML = '<tr><td colspan="8" class="text-center p-4 text-gray-500">No combos match your filters.</td></tr>';
+            }
+        }
+
+        function toggleComboDetails(index) {
+            if (expandedCombos.has(index)) {
+                expandedCombos.delete(index);
+            } else {
+                expandedCombos.add(index);
+            }
+            renderCombosTable();
+        }
+
+        function initTabs() {
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    tabButtons.forEach(btn => {
+                        btn.classList.remove('active');
+                        btn.classList.add('border-transparent', 'text-gray-400');
+                    });
+                    tabPanels.forEach(panel => {
+                        panel.classList.add('hidden');
+                    });
+
+                    button.classList.add('active');
+                    button.classList.remove('border-transparent', 'text-gray-400');
+                    const tabName = button.getAttribute('data-tab');
+                    const activePanel = document.getElementById(`${tabName}-panel`);
+                    if (activePanel) {
+                        activePanel.classList.remove('hidden');
+                    }
+                });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const dateStr = new Date().toLocaleString();
+            document.getElementById('snapshot-date').textContent = `As of: ${dateStr}`;
+            
+            initTabs();
+            renderPositionsTable();
+            renderCombosTable();
+
+            document.getElementById('group-filter-select').addEventListener('change', renderCombosTable);
+            document.getElementById('combo-filter-input').addEventListener('input', renderCombosTable);
+        });
+    </script>
+</body>
+</html>
