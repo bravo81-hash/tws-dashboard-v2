@@ -3103,9 +3103,10 @@ def get_builder_profile():
         finite_exp_pnl = [p for p in exp_pnl if p is not None and math.isfinite(p)]
 
         net_calls = sum(l["qty"] for l in legs_with_details if l["right"] == "C")
-        net_puts = sum(l["qty"] for l in legs_with_details if l["right"] == "P")
-        has_unlimited_profit = (net_calls > 0) or (net_puts < 0)
-        has_unlimited_loss = (net_calls < 0) or (net_puts > 0)
+        # For non-negative underlyings, option-side unlimited tails are call-driven:
+        # long net calls -> unlimited upside, short net calls -> unlimited upside risk.
+        has_unlimited_profit = net_calls > 0
+        has_unlimited_loss = net_calls < 0
 
         max_profit_val = (
             "Unlimited"

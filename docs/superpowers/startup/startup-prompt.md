@@ -39,14 +39,10 @@ Resume TWS Dashboard modernization from local status files.
 - Index qualification mappings are now symbol-specific (`RUT -> RUSSELL`, `NDX -> NASDAQ`, `XSP -> CBOE`) and backed by direct IB API probe evidence.
 - `GET /option_chain` now requests option contracts on `SMART`, fixing `RUT` chain contract lookup.
 - Strategy-builder ladder column order is now strike-centered with call/put volume and OI columns aligned to the requested workstation flow.
-- Backend tests currently total `45`.
+- Builder regression coverage now includes credit spread, iron condor, and put ratio backspread scenarios; put-ratio finite-loss classification is fixed.
+- Backend tests currently total `48`.
 
 5) Next slice target:
-- Continue risk workspace visual/detail parity:
-  - chart readability and matrix row/column annotation density
-  - tighter interaction/visual consistency with the builder workstation style
-- Expand strategy-builder regression coverage:
-  - credit spread, iron condor, and mixed-width structures
 - Optional earnings/dividend event integration into portfolio risk digest panel (graceful offline fallback)
 
 6) Update both status artifacts after each completed slice:

@@ -64,6 +64,6 @@
 
 ## Active Next Slices
 
-- [ ] Risk workspace finishing pass (chart readability polish + matrix annotation clarity)
-- [ ] Builder regression expansion (credit spread / condor / asymmetric structures)
+- [x] Risk workspace finishing pass (chart readability polish + matrix annotation clarity)
+- [x] Builder regression expansion (credit spread / condor / asymmetric structures)
 - [ ] Optional earnings/dividend feed integration in portfolio digest with graceful fallback

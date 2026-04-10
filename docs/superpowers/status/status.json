@@ -1,6 +1,6 @@
 {
   "phase": "strategy_builder_option_chain_reliability_and_risk_workspace_stabilization",
-  "current_task": "non_spx_option_chain_loading_and_ladder_column_order_fix_completed",
+  "current_task": "builder_regression_expansion_credit_condor_ratio_scenarios_completed",
   "completed_tasks": [
     "initialize_local_git_repo",
     "rename_backend_to_dashboard_py",
@@ -46,9 +46,12 @@
     "map_index_lookup_exchanges_rut_russell_ndx_nasdaq_xsp_cboe",
     "fix_option_chain_index_contract_detail_lookup_on_smart_exchange",
     "reorder_strategy_builder_option_ladder_columns_to_strike_centered_layout",
-    "add_get_expiries_endpoint_regression_tests_for_fallback_and_index_mappings"
+    "add_get_expiries_endpoint_regression_tests_for_fallback_and_index_mappings",
+    "risk_workspace_finishing_pass_context_strip_now_exp_atm_annotations_and_chart_readability_polish",
+    "expand_builder_profile_regression_coverage_credit_spread_iron_condor_put_ratio_backspread",
+    "fix_builder_profile_unlimited_flags_for_put_ratio_finite_loss_cases"
   ],
-  "next_task": "continue_risk_workspace_visual_cleanup_and_add_more_builder_structure_regression_scenarios",
+  "next_task": "optional_earnings_dividend_feed_integration_for_portfolio_risk_digest_with_offline_fallback",
   "blockers": [],
   "verification": {
     "python_compile": "pass",
@@ -59,7 +62,7 @@
     "risk_workspace_tab_navigation": "pass_profile_actions_switch_to_full_width_risk_tab",
     "risk_crosshair_sync": "pass_main_chart_strip_marker_and_value_sync",
     "dynamic_greek_strip_update": "pass_get_pnl_by_date_returns_greek_curves_and_frontend_rebinds",
-    "backend_unit_tests": "pass_45_unittest_cases",
+    "backend_unit_tests": "pass_48_unittest_cases",
     "backend_health_check": "pass_via_flask_test_client",
     "risk_table_endpoint_check": "pass_via_flask_test_client_stock_only_case",
     "risk_table_matrix_payload": "pass_get_risk_table_returns_matrix_axes_columns_and_metric_surfaces",
@@ -68,7 +71,10 @@
     "tws_account_summary_priority_check": "pass_get_account_risk_context_prefers_tws_values_when_present",
     "portfolio_risk_digest_endpoint_check": "pass_sgpv_ratio_thresholds_and_expiring_soon_alerts",
     "client_portal_account_context_parser_tests": "pass_disabled_and_metric_parsing_paths",
+    "risk_workspace_finishing_pass": "pass_context_strip_now_exp_atm_annotations_heat_scale_and_chart_readability_tuning",
     "builder_profile_spread_math_check": "pass_put_debit_spread_net_cost_max_profit_max_loss_regression",
+    "builder_profile_structures_regression": "pass_credit_spread_iron_condor_put_ratio_backspread_scenarios",
+    "builder_profile_put_ratio_risk_flag_fix": "pass_put_ratio_backspread_reports_finite_max_loss_when_net_calls_not_short",
     "builder_profile_breakeven_resolution_check": "pass_dense_adaptive_price_axis_for_narrow_spread_crossings",
     "get_expiries_live_symbol_check": "pass_spx_rut_spy_iwm_return_expiries_with_200",
     "option_chain_live_symbol_check": "pass_spx_rut_spy_iwm_return_rows_with_200",
@@ -99,5 +105,5 @@
     "docs/superpowers/status/status.json",
     "docs/superpowers/startup/startup-prompt.md"
   ],
-  "updated_at": "2026-04-09T13:30:50Z"
+  "updated_at": "2026-04-10T11:39:14Z"
 }

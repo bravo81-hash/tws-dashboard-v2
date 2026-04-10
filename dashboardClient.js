@@ -72,6 +72,15 @@ function parseNumber(value, defaultValue = 0) {
     return Number.isFinite(parsed) ? parsed : defaultValue;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
 function ensureChartPluginsRegistered() {
     if (chartPluginsRegistered || typeof Chart === 'undefined' || typeof Chart.register !== 'function') return;
     const plugins = [
@@ -1589,11 +1598,14 @@ function setRiskCursorChips(price, points, basis) {
         chips.innerHTML = '';
         return;
     }
-    let html = `<span class="risk-chip">Px ${formatNumber(price, 2)}</span>`;
+    const spot = parseNumber(currentRiskProfileData?.metrics?.current_und_price, NaN);
+    const pctFromSpot = Number.isFinite(spot) && spot !== 0 ? ((parseNumber(price, 0) - spot) / spot) * 100 : NaN;
+    const spotDeltaText = Number.isFinite(pctFromSpot) ? ` ${pctFromSpot >= 0 ? '+' : ''}${pctFromSpot.toFixed(2)}%` : '';
+    let html = `<span class="risk-chip risk-chip-primary">Px ${formatNumber(price, 2)}${spotDeltaText}</span>`;
     points.slice(0, 4).forEach((point) => {
         const value = parseNumber(point.parsed?.y, 0);
         const lineColor = point.dataset?.borderColor || '#7dd3fc';
-        html += `<span class="risk-chip" style="border-color:${lineColor}88;color:${lineColor}">${point.dataset?.label || 'Curve'} ${formatNumber(value, 2)} (${formatPercentFromBasis(value, basis)})</span>`;
+        html += `<span class="risk-chip" style="border-color:${lineColor}88;color:${lineColor}">${point.dataset?.label || 'Curve'} ${formatNumber(value, 2)} | ${formatPercentFromBasis(value, basis)}</span>`;
     });
     chips.innerHTML = html;
 }
@@ -1775,22 +1787,42 @@ function formatRiskTableCellValue(metric, value) {
     return `${v >= 0 ? '+' : ''}${v.toFixed(def.digits)}`;
 }
 
+function getRiskHeatCellIntensity(value, minAbs, maxAbs) {
+    if (value == null || Number.isNaN(parseNumber(value, NaN))) return null;
+    const v = parseNumber(value, 0);
+    const scale = Math.max(maxAbs, Math.abs(minAbs), 1e-9);
+    return Math.min(1, Math.abs(v) / scale);
+}
+
+function getRiskHeatBandLabel(intensity) {
+    if (intensity == null) return 'N/A';
+    if (intensity >= 0.82) return 'Extreme';
+    if (intensity >= 0.56) return 'Elevated';
+    if (intensity >= 0.24) return 'Moderate';
+    return 'Light';
+}
+
 function getRiskHeatCellStyle(value, minAbs, maxAbs) {
     if (value == null || Number.isNaN(parseNumber(value, NaN))) return '';
     const v = parseNumber(value, 0);
-    const scale = Math.max(maxAbs, Math.abs(minAbs), 1e-9);
-    const intensity = Math.min(1, Math.abs(v) / scale);
-    const alpha = 0.1 + (intensity * 0.35);
+    const intensity = getRiskHeatCellIntensity(value, minAbs, maxAbs) ?? 0;
+    const alpha = 0.1 + (intensity * 0.37);
     if (v >= 0) {
-        return `background: rgba(16, 185, 129, ${alpha.toFixed(3)}); color: #d1fae5;`;
+        const edge = intensity > 0.82 ? 'box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.58);' : '';
+        return `background: rgba(16, 185, 129, ${alpha.toFixed(3)}); color: #d1fae5; ${edge}`;
     }
-    return `background: rgba(239, 68, 68, ${alpha.toFixed(3)}); color: #fee2e2;`;
+    const edge = intensity > 0.82 ? 'box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.62);' : '';
+    return `background: rgba(239, 68, 68, ${alpha.toFixed(3)}); color: #fee2e2; ${edge}`;
 }
 
 function renderRiskTableLoading(message = 'Loading risk table...') {
     const body = document.getElementById('risk-table-body');
     const head = document.getElementById('risk-table-head');
     const summary = document.getElementById('risk-table-summary');
+    const context = document.getElementById('risk-table-context');
+    if (context) {
+        context.innerHTML = `<div class="col-span-full text-center text-muted text-xs">${escapeHtml(message)}</div>`;
+    }
     if (summary) summary.innerHTML = `<div class="col-span-4 text-center text-muted">${message}</div>`;
     if (head) head.innerHTML = '';
     if (body) body.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-muted">${message}</td></tr>`;
@@ -1800,11 +1832,13 @@ function renderRiskTable() {
     const body = document.getElementById('risk-table-body');
     const head = document.getElementById('risk-table-head');
     const summary = document.getElementById('risk-table-summary');
+    const context = document.getElementById('risk-table-context');
     if (!body || !head || !summary) return;
     const data = currentRiskTableData;
     const matrix = data?.matrix;
 
     if (!data || !matrix || !Array.isArray(matrix.price_axis) || matrix.price_axis.length === 0) {
+        if (context) context.innerHTML = '<div class="col-span-full text-center text-muted text-xs">No matrix context available.</div>';
         summary.innerHTML = '<div class="col-span-4 text-center text-muted">No risk table data available.</div>';
         head.innerHTML = '';
         body.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-muted">No matrix.</td></tr>';
@@ -1832,6 +1866,7 @@ function renderRiskTable() {
     const surface = surfaces[metric];
 
     if (!Array.isArray(surface) || surface.length === 0) {
+        if (context) context.innerHTML = `<div class="col-span-full text-center text-muted text-xs">Metric "${escapeHtml(metric)}" has no matrix context.</div>`;
         summary.innerHTML = `<div class="col-span-4 text-center text-muted">Metric "${metric}" has no values.</div>`;
         head.innerHTML = '';
         body.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-muted">No rows.</td></tr>';
@@ -1850,13 +1885,62 @@ function renderRiskTable() {
     const maxValue = flatValues.length ? Math.max(...flatValues) : 0;
     const timeAtmIndex = Math.max(0, timeColumns.findIndex((col) => parseNumber(col.days, 0) === 0));
     const atmRowIndex = parseInt(matrix.atm_row_index, 10);
+    const metricLabel = RISK_TABLE_METRIC_DEFS[metric]?.label || metric;
+    const pctMin = pctAxis.length ? parseNumber(pctAxis[0], 0) : 0;
+    const pctMax = pctAxis.length ? parseNumber(pctAxis[pctAxis.length - 1], 0) : 0;
+    const priceMin = parseNumber(priceAxis[0], parseNumber(data.spot, 0));
+    const priceMax = parseNumber(priceAxis[priceAxis.length - 1], parseNumber(data.spot, 0));
+    const rowStep = priceAxis.length > 1
+        ? Math.abs(parseNumber(priceAxis[1], 0) - parseNumber(priceAxis[0], 0))
+        : 0;
+    const rowStepText = rowStep > 0 ? ` | step ${formatNumber(rowStep, 2)}` : '';
+    const normalizedAtmRowIndex = Number.isInteger(atmRowIndex) && atmRowIndex >= 0 && atmRowIndex < priceAxis.length ? atmRowIndex : 0;
+    const atmPrice = parseNumber(priceAxis[normalizedAtmRowIndex], parseNumber(data.spot, 0));
+    const nowCol = timeColumns[timeAtmIndex] || { label: 'T+0', days: 0, date: '' };
+    const expCol = timeColumns[timeColumns.length - 1] || nowCol;
 
-    let headHtml = '<tr><th class="p-2 text-left risk-matrix-sticky-col">Strike</th>';
+    if (context) {
+        context.innerHTML = `
+            <div class="risk-table-context-item">
+                <div class="risk-table-context-label">Axes</div>
+                <div class="risk-table-context-value">Rows: Underlying vs spot delta<br>Columns: horizon (DTE)</div>
+            </div>
+            <div class="risk-table-context-item">
+                <div class="risk-table-context-label">Coverage</div>
+                <div class="risk-table-context-value">$${formatNumber(priceMin, 2)} to $${formatNumber(priceMax, 2)} | ${pctMin >= 0 ? '+' : ''}${pctMin.toFixed(1)}% to ${pctMax >= 0 ? '+' : ''}${pctMax.toFixed(1)}%${rowStepText}</div>
+            </div>
+            <div class="risk-table-context-item">
+                <div class="risk-table-context-label">Anchors</div>
+                <div class="risk-table-context-value">ATM row $${formatNumber(atmPrice, 2)} | NOW ${escapeHtml(nowCol.label || `T+${parseInt(nowCol.days, 10) || 0}`)} | EXP ${escapeHtml(expCol.label || `T+${parseInt(expCol.days, 10) || 0}`)}</div>
+            </div>
+            <div class="risk-table-context-item">
+                <div class="risk-table-context-label">${escapeHtml(metricLabel)} Scale</div>
+                <div class="risk-table-context-value">
+                    ${formatRiskTableCellValue(metric, minValue)} / 0 / ${formatRiskTableCellValue(metric, maxValue)}
+                    <div class="risk-table-scale-bar">
+                        <span class="risk-table-scale-neg">Loss</span>
+                        <span class="risk-table-scale-zero">Flat</span>
+                        <span class="risk-table-scale-pos">Gain</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    let headHtml = '<tr><th class="p-2 text-left risk-matrix-sticky-col"><div class="risk-matrix-th-main">Underlying</div><div class="risk-matrix-th-sub">Rows: price and spot delta</div></th>';
     timeColumns.forEach((col, colIdx) => {
         const atmColCls = colIdx === timeAtmIndex ? ' risk-matrix-atm-col' : '';
+        const isNowCol = colIdx === timeAtmIndex;
+        const isExpCol = colIdx === timeColumns.length - 1;
+        const colDays = parseInt(col.days, 10);
+        const colLabel = col.label || (Number.isInteger(colDays) ? `T+${colDays}` : 'T+?');
+        const meta = `${Number.isInteger(colDays) ? `${colDays}d` : ''}${col.date ? `${Number.isInteger(colDays) ? ' | ' : ''}${col.date}` : ''}`;
+        const badgeHtml = isNowCol
+            ? '<span class="risk-matrix-badge">NOW</span>'
+            : (isExpCol ? '<span class="risk-matrix-badge risk-matrix-badge-exp">EXP</span>' : '');
         headHtml += `<th class="p-2 text-center${atmColCls}">
-            <div class="font-semibold">${col.label || `T+${col.days}`}</div>
-            <div class="text-[10px] text-muted">${col.date || ''}</div>
+            <div class="risk-matrix-th-main">${escapeHtml(colLabel)}${badgeHtml}</div>
+            <div class="risk-matrix-th-sub">${escapeHtml(meta)}</div>
         </th>`;
     });
     headHtml += '</tr>';
@@ -1866,17 +1950,32 @@ function renderRiskTable() {
     for (let rowIdx = 0; rowIdx < priceAxis.length; rowIdx++) {
         const price = parseNumber(priceAxis[rowIdx], 0);
         const pct = parseNumber(pctAxis[rowIdx], 0);
-        const isAtmRow = rowIdx === atmRowIndex;
+        const isAtmRow = rowIdx === normalizedAtmRowIndex;
+        const pctText = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+        const rowBadge = isAtmRow ? '<span class="risk-matrix-row-badge">ATM</span>' : '';
         bodyHtml += `<tr class="${isAtmRow ? 'risk-matrix-atm-row' : ''}">
             <td class="p-2 font-mono risk-matrix-sticky-col">
-                <div>${formatNumber(price, 2)}</div>
-                <div class="text-[10px] text-muted">(${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)</div>
+                <div class="risk-matrix-row-main"><span>${formatNumber(price, 2)}</span>${rowBadge}</div>
+                <div class="risk-matrix-row-sub">${pctText} vs spot</div>
             </td>`;
         for (let colIdx = 0; colIdx < timeColumns.length; colIdx++) {
             const rawVal = surface[colIdx]?.[rowIdx];
             const style = getRiskHeatCellStyle(rawVal, minValue, maxValue);
             const atmColCls = colIdx === timeAtmIndex ? ' risk-matrix-atm-col' : '';
-            bodyHtml += `<td class="p-1.5 font-mono text-center${atmColCls}" style="${style}">${formatRiskTableCellValue(metric, rawVal)}</td>`;
+            const intensity = getRiskHeatCellIntensity(rawVal, minValue, maxValue);
+            const magnitude = getRiskHeatBandLabel(intensity);
+            const numeric = parseNumber(rawVal, NaN);
+            const signLabel = Number.isFinite(numeric) ? (numeric > 0 ? 'Gain' : (numeric < 0 ? 'Loss' : 'Flat')) : 'N/A';
+            const colDays = parseInt(timeColumns[colIdx]?.days, 10);
+            const colLabel = timeColumns[colIdx]?.label || (Number.isInteger(colDays) ? `T+${colDays}` : 'T+?');
+            const note = isAtmRow && colIdx === timeAtmIndex ? 'ATM x NOW' : (isAtmRow ? 'ATM row' : (colIdx === timeAtmIndex ? 'NOW col' : ''));
+            const tooltip = `${metricLabel}: ${formatRiskTableCellValue(metric, rawVal)} | ${signLabel}, ${magnitude} | Px ${formatNumber(price, 2)} (${pctText}) @ ${colLabel}`;
+            bodyHtml += `<td class="p-1.5 font-mono text-center${atmColCls}" style="${style}" title="${escapeHtml(tooltip)}">
+                <div class="risk-matrix-cell">
+                    <div class="risk-matrix-cell-main">${formatRiskTableCellValue(metric, rawVal)}</div>
+                    ${note ? `<div class="risk-matrix-cell-note">${note}</div>` : ''}
+                </div>
+            </td>`;
         }
         bodyHtml += '</tr>';
     }
@@ -2626,7 +2725,14 @@ function drawRiskChart() {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: colors.text, usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 14 }
+                    labels: {
+                        color: colors.text,
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 14,
+                        font: { family: "'IBM Plex Mono', monospace", size: 11, weight: '600' }
+                    }
                 },
                 tooltip: { enabled: false, external: externalTooltipHandler, position: 'nearest' },
                 annotation: { annotations },
@@ -2638,10 +2744,11 @@ function drawRiskChart() {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: 'Underlying Price', color: colors.text },
+                    title: { display: true, text: 'Underlying Price ($)', color: colors.text },
                     grid: { color: `${colors.grid}66` },
                     ticks: {
                         color: colors.text,
+                        maxTicksLimit: 9,
                         maxRotation: 0,
                         autoSkipPadding: 18,
                         callback(value) {
@@ -2653,6 +2760,7 @@ function drawRiskChart() {
                 xTop: {
                     type: 'linear',
                     position: 'top',
+                    title: { display: true, text: 'Delta vs Spot', color: colors.textMuted },
                     grid: { display: false },
                     ticks: {
                         color: colors.textMuted,
@@ -2670,7 +2778,7 @@ function drawRiskChart() {
                     min: yMin,
                     max: yMax,
                     grid: { color: `${colors.grid}88` },
-                    ticks: { color: colors.text, callback: (value) => formatAxisCurrency(value) }
+                    ticks: { color: colors.text, maxTicksLimit: 8, callback: (value) => formatAxisCurrency(value) }
                 },
                 yPct: {
                     position: 'right',

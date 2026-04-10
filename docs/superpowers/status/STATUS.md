@@ -53,19 +53,24 @@
 - Fixed index option-chain contract-detail lookup by requesting option contracts on `SMART` exchange (resolves `RUT` chain loading).
 - Reordered strategy-builder option ladder columns to strike-centered call/put ordering with volume and open-interest fields aligned to workstation view expectations.
 - Added deterministic endpoint regression coverage for expiry lookup behavior and fallback paths (`tests/test_get_expiries_endpoint.py`).
+- Completed risk workspace finishing pass for matrix annotation clarity: added context strip (axes/coverage/anchors/scale), NOW/EXP/ATM badges, and richer per-cell tooltips for faster orientation.
+- Polished risk graph readability with spot-relative cursor chips, clearer axis titles, and denser mono legend labeling aligned to workstation style.
+- Expanded builder endpoint regression coverage with deterministic credit-spread, iron-condor, and put-ratio backspread scenarios (`tests/test_builder_profile_endpoint.py`).
+- Fixed builder max-risk classification for put-heavy ratios so finite-loss structures no longer report `maxLoss: "Unlimited"` when net call exposure is not short.
 
 ## In Progress
 - None.
 
 ## Next
-- Continue risk workspace visual cleanup (chart readability, matrix annotations, and tighter visual parity with OptionNetExplorer-style workflow expectations).
-- Add additional strategy builder validation slices (credit spreads, iron condors, ratio structures) with endpoint regression tests.
 - Add optional upcoming-earnings/dividend event feeds into the portfolio risk digest area (with graceful offline fallback).
 
 ## Verification Evidence
 - `python3 -m py_compile dashboard.py runtime.py combo_schema.py valuation.py routes.py client_portal_adapter.py` passed.
 - `node --check dashboardClient.js && node --check strategyBuilder.js` passed.
-- `python3 -m unittest discover -s tests -p 'test_*.py'` passed (`45` tests).
+- `python3 -m unittest discover -s tests -p 'test_*.py'` passed (`48` tests).
+- Builder profile endpoint regressions now cover put debit spread, call credit spread, iron condor, and put ratio backspread finite-loss behavior.
+- Risk table now includes a context strip (axes/coverage/anchors/scale), stronger NOW/EXP/ATM annotations, and cell-level hover tooltips with sign/magnitude context.
+- Risk graph cursor chips now include spot-relative percent deltas; chart axes/legend labels were tightened for readability parity with builder workstation typography.
 - Risk modal layout guardrails now enforce bounded dimensions (`#risk-modal-content`, `.risk-chart-shell`, `#risk-chart-canvas`) to prevent runaway popup growth.
 - Risk chart now uses numeric x-series points for robust ATM/breakeven annotation placement and top-axis percentage labels.
 - Profile actions now route into the dedicated risk tab (`Risk Workspace`) instead of opening a popup modal.
