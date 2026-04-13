@@ -25,6 +25,10 @@ let currentRiskStripSeries = {};
 let currentRiskCrosshairPrice = null;
 let currentRiskCrosshairIndex = -1;
 let riskActiveView = 'graph';
+let lastRiskSourceTab = 'combos';
+let riskIvEnabled = true;
+let riskTimeEnabled = true;
+let riskAdjustmentEnabled = false;
 let sgpvChart = null;
 let currentSgpvData = null;
 let chartPluginsRegistered = false;
@@ -46,6 +50,7 @@ let sgpvUiState = {
     netLiq: null,
 };
 let sgpvNetLiqManualOverride = false;
+let currentRiskChainContext = null;
 
 // ========================================================================================
 // --- HELPER & UTILITY FUNCTIONS ---
@@ -79,6 +84,143 @@ function escapeHtml(value) {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+}
+
+function getRiskLegContract(leg) {
+    if (leg?.tws_data?.contract) return leg.tws_data.contract;
+    if (leg?.contract) return leg.contract;
+    if (leg?.conId != null && portfolioData[leg.conId]?.contract) return portfolioData[leg.conId].contract;
+    return leg || {};
+}
+
+function deriveRiskChainContext(legs) {
+    const optionContracts = [];
+    (legs || []).forEach((leg) => {
+        const contract = getRiskLegContract(leg);
+        const secType = String(contract?.secType || leg?.secType || 'OPT').toUpperCase();
+        if (secType !== 'OPT') return;
+        const expiry = String(contract?.expiry || leg?.expiry || '');
+        if (!/^\d{8}$/.test(expiry)) return;
+        const symbol = String(contract?.symbol || leg?.symbol || '').toUpperCase();
+        if (!symbol) return;
+        optionContracts.push({ symbol, expiry });
+    });
+
+    if (!optionContracts.length) return null;
+    const symbolCounts = new Map();
+    optionContracts.forEach(({ symbol }) => symbolCounts.set(symbol, (symbolCounts.get(symbol) || 0) + 1));
+    const symbol = [...symbolCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || optionContracts[0].symbol;
+    const expiries = optionContracts
+        .filter((row) => row.symbol === symbol)
+        .map((row) => row.expiry)
+        .sort();
+    const expiry = expiries[0] || optionContracts[0].expiry;
+    return { symbol, expiry };
+}
+
+function renderRiskChainStatus(message = '', isError = false) {
+    const statusEl = document.getElementById('risk-chain-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.classList.toggle('text-red-500', !!isError);
+}
+
+function renderRiskChainPlaceholder(message) {
+    const body = document.getElementById('risk-chain-table-body');
+    if (!body) return;
+    body.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-2">${escapeHtml(message)}</td></tr>`;
+}
+
+function renderRiskChainContextUi(ctx) {
+    const contextEl = document.getElementById('risk-chain-context');
+    const dteChip = document.getElementById('risk-chain-dte-chip');
+    if (contextEl) {
+        contextEl.textContent = ctx
+            ? `${ctx.symbol} • ${ctx.expiry.slice(0, 4)}-${ctx.expiry.slice(4, 6)}-${ctx.expiry.slice(6, 8)}`
+            : 'Select a profile to load chain.';
+    }
+    if (dteChip) {
+        if (!ctx) {
+            dteChip.textContent = '-- DTE';
+            return;
+        }
+        const dteInfo = calculateDTE(ctx.expiry);
+        const days = Number.isFinite(dteInfo.days) ? dteInfo.days : '--';
+        dteChip.textContent = `${days} DTE`;
+    }
+}
+
+function renderRiskOptionChainRows(rows, undPrice) {
+    const body = document.getElementById('risk-chain-table-body');
+    if (!body) return;
+    if (!Array.isArray(rows) || !rows.length) {
+        renderRiskChainPlaceholder('No chain rows returned.');
+        return;
+    }
+    const sorted = [...rows].sort((a, b) => parseNumber(a?.strike, 0) - parseNumber(b?.strike, 0));
+    const atmIdx = sorted.reduce((bestIdx, row, idx) => {
+        const strike = parseNumber(row?.strike, NaN);
+        if (!Number.isFinite(strike) || !Number.isFinite(undPrice)) return bestIdx;
+        if (bestIdx < 0) return idx;
+        const bestStrike = parseNumber(sorted[bestIdx]?.strike, NaN);
+        return Math.abs(strike - undPrice) < Math.abs(bestStrike - undPrice) ? idx : bestIdx;
+    }, -1);
+    const tableRows = sorted.map((row, idx) => {
+        const callDelta = parseNumber(row?.call?.delta, NaN);
+        const callMid = parseNumber(row?.call?.mid, NaN);
+        const putMid = parseNumber(row?.put?.mid, NaN);
+        const putDelta = parseNumber(row?.put?.delta, NaN);
+        const strike = parseNumber(row?.strike, NaN);
+        return `
+            <tr class="${idx === atmIdx ? 'risk-chain-row-atm' : ''}">
+                <td class="risk-chain-cell-calls">${Number.isFinite(callDelta) ? `${callDelta >= 0 ? '+' : ''}${callDelta.toFixed(2)}` : '—'}</td>
+                <td class="risk-chain-cell-calls">${Number.isFinite(callMid) ? formatNumber(callMid, 2) : '—'}</td>
+                <td class="text-center text-secondary font-semibold">${Number.isFinite(strike) ? formatNumber(strike, 2) : '—'}</td>
+                <td class="text-right risk-chain-cell-puts">${Number.isFinite(putMid) ? formatNumber(putMid, 2) : '—'}</td>
+                <td class="text-right risk-chain-cell-puts">${Number.isFinite(putDelta) ? `${putDelta >= 0 ? '+' : ''}${putDelta.toFixed(2)}` : '—'}</td>
+            </tr>
+        `;
+    }).join('');
+    body.innerHTML = tableRows;
+}
+
+async function loadRiskOptionChain(legs) {
+    const context = deriveRiskChainContext(legs);
+    currentRiskChainContext = context;
+    renderRiskChainContextUi(context);
+    if (!context) {
+        renderRiskChainPlaceholder('No option contracts in selection.');
+        renderRiskChainStatus('');
+        return;
+    }
+
+    const windowEl = document.getElementById('risk-chain-window');
+    const halfWidth = Math.max(2, Math.min(12, parseInt(windowEl?.value || '5', 10)));
+    renderRiskChainPlaceholder('Loading option chain...');
+    renderRiskChainStatus('Fetching live chain...');
+
+    try {
+        const url = `${API_BASE_URL}/option_chain?symbol=${encodeURIComponent(context.symbol)}&expiry=${encodeURIComponent(context.expiry)}&strike_half_width=${halfWidth}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+            let message = 'Unable to load option chain.';
+            try {
+                const err = await res.json();
+                message = err.error || message;
+            } catch (e) {}
+            throw new Error(message);
+        }
+        const payload = await res.json();
+        renderRiskOptionChainRows(payload.rows || [], parseNumber(payload.undPrice, NaN));
+        const coverageAny = parseNumber(payload?.meta?.coverage_any, 0);
+        const coverageSelected = parseNumber(payload?.meta?.contracts_selected, 0);
+        renderRiskChainStatus(
+            `Live coverage ${coverageAny}/${coverageSelected} • Spot ${Number.isFinite(parseNumber(payload?.undPrice, NaN)) ? `$${formatNumber(parseNumber(payload.undPrice, 0), 2)}` : 'N/A'}`
+        );
+    } catch (error) {
+        renderRiskChainPlaceholder(error.message || 'Unable to load option chain.');
+        renderRiskChainStatus(error.message || 'Unable to load option chain.', true);
+    }
 }
 
 function ensureChartPluginsRegistered() {
@@ -344,6 +486,10 @@ function hideModal(m) {
         currentSgpvData = null;
         currentRiskAccountContext = null;
         sgpvNetLiqManualOverride = false;
+        currentRiskChainContext = null;
+        renderRiskChainContextUi(null);
+        renderRiskChainPlaceholder('No chain loaded.');
+        renderRiskChainStatus('');
         renderSgpvContextNote();
         clearRiskOverlayPanels();
     }
@@ -481,6 +627,14 @@ function activateTab(tabName) {
     tabPanels.forEach((panel) => {
         panel.classList.toggle('hidden', panel.id !== `${tabName}-panel`);
     });
+    const riskPanel = document.getElementById('risk-panel');
+    if (
+        riskPanel &&
+        !riskPanel.classList.contains('hidden') &&
+        tabName !== lastRiskSourceTab
+    ) {
+        hideModal(riskPanel);
+    }
 }
 
 function initTabs() {
@@ -550,10 +704,18 @@ function bindEventListeners() {
     el('filter-strike', 'input', filterLegsTable); // This ID exists
     el('combo-filter-input', 'input', () => updateCombosView(true)); // This ID exists
     el('group-filter-select', 'change', () => updateCombosView(true)); // This ID exists
-    el('modal-close-btn', 'click', () => activateTab('combos'));
+    el('modal-close-btn', 'click', () => {
+        if (lastRiskSourceTab) activateTab(lastRiskSourceTab);
+        hideModal(document.getElementById('risk-panel'));
+    });
     el('risk-view-graph-btn', 'click', () => setRiskModalView('graph'));
     el('risk-view-table-btn', 'click', () => setRiskModalView('table'));
     el('risk-view-sgpv-btn', 'click', () => setRiskModalView('sgpv'));
+    el('risk-chain-window', 'change', () => {
+        if (currentRiskProfileLegs && currentRiskProfileLegs.length) {
+            loadRiskOptionChain(currentRiskProfileLegs);
+        }
+    });
     el('risk-table-metric', 'change', () => {
         getRiskTableSettingsFromControls();
         renderRiskTable();
@@ -611,6 +773,20 @@ function bindEventListeners() {
     el('combo-order-modal-cancel-btn', 'click', () => hideModal(document.getElementById('combo-order-modal'))); // This ID exists
     el('combo-order-modal-confirm-btn', 'click', transmitComboCloseOrder); // This ID exists
     el('combo-limit-price', 'input', updateComboPriceType); // This ID exists
+
+    window.addEventListener('builder-open-risk-workspace', (event) => {
+        const detail = event?.detail || {};
+        const stagedLegs = Array.isArray(detail.legs) ? detail.legs : [];
+        if (!stagedLegs.length) {
+            alert('No staged legs available to profile.');
+            return;
+        }
+        showRiskProfile({
+            legs: stagedLegs,
+            name: detail.name || 'Modeled Trade',
+            sourceTab: detail.sourceTab || 'builder',
+        });
+    });
 
     const combosBody = document.getElementById('combos-table-body');
     if (combosBody) {
@@ -792,7 +968,7 @@ function handleComboTableClick(event) {
         if (comboIndex == null) return;
         const action = actionButton.dataset.action;
         if (action === 'add-leg') enterAddLegsMode(comboIndex);
-        if (action === 'profile') showRiskProfile({ comboIndex });
+        if (action === 'profile') showRiskProfile({ comboIndex, sourceTab: 'combos' });
         if (action === 'close-combo') openCloseEntireComboModal(comboIndex);
         if (action === 'delete-combo') deleteCombo(comboIndex);
         return;
@@ -1513,7 +1689,7 @@ function profileSelectedCombos() {
 
 
     if (legsForProfile.length > 0) {
-        showRiskProfile({ legs: legsForProfile, name: `Aggregated (${selectedCombos.size})` });
+        showRiskProfile({ legs: legsForProfile, name: `Aggregated (${selectedCombos.size})`, sourceTab: 'combos' });
     } else {
         alert('No open legs in selected combos to profile.');
     }
@@ -2426,28 +2602,36 @@ function renderRiskLegsPanel(legs) {
     let html = '<div class="risk-overlay-title">Selected Legs</div>';
     legs.forEach((leg) => {
         const tws = portfolioData[leg.conId];
-        if (!tws) return;
+        const contract = tws?.contract || leg || {};
         const side = parseNumber(leg.qty, 0) >= 0 ? 'BUY' : 'SELL';
         const sideColor = side === 'BUY' ? '#10b981' : '#f87171';
-        const strike = parseNumber(tws.contract?.strike, 0);
-        const right = (tws.contract?.right || '').toUpperCase();
-        const expiry = tws.contract?.expiry || '';
-        const multiplier = getLegMultiplier(tws);
-        const netDelta = parseNumber(tws.greeks?.delta, 0) * parseNumber(leg.qty, 0) * multiplier;
+        const strike = parseNumber(contract?.strike, 0);
+        const right = String(contract?.right || '').toUpperCase();
+        const expiry = contract?.expiry || '';
+        const multiplier = tws
+            ? getLegMultiplier(tws)
+            : Math.max(1, parseNumber(leg.multiplier, 100));
+        const unitDelta = tws ? parseNumber(tws.greeks?.delta, null) : null;
+        const netDelta =
+            unitDelta == null
+                ? null
+                : unitDelta * parseNumber(leg.qty, 0) * multiplier;
         html += `
             <div class="risk-overlay-leg">
                 <span style="color:${sideColor}" class="font-semibold">${side} ${Math.abs(parseNumber(leg.qty, 0))}</span>
                 <span class="truncate text-secondary">${expiry} ${strike || ''}${right}</span>
-                <span class="font-mono text-muted">Δ ${formatNumber(netDelta, 1)}</span>
+                <span class="font-mono text-muted">Δ ${netDelta == null ? '—' : formatNumber(netDelta, 1)}</span>
             </div>`;
     });
     panel.innerHTML = html;
 }
 
 // ... (showRiskProfile, drawRiskChart remain mostly the same, ensuring formatters are called) ...
-async function showRiskProfile({comboIndex, legs, name}) {
+async function showRiskProfile({comboIndex, legs, name, sourceTab}) {
     let targetLegs = legs;
     let targetName = name;
+    const resolvedSourceTab = sourceTab || (comboIndex != null ? 'combos' : 'builder');
+    lastRiskSourceTab = resolvedSourceTab;
 
     currentRiskProfileLegs = null;
     currentRiskTableData = null;
@@ -2469,23 +2653,32 @@ async function showRiskProfile({comboIndex, legs, name}) {
     currentRiskProfileLegs = targetLegs;
 
     const riskPanel = document.getElementById('risk-panel');
+    const closeBtn = document.getElementById('modal-close-btn');
     document.getElementById('modal-title').textContent = `Risk Profile: ${targetName}`;
     ensureChartPluginsRegistered();
-    enforceRiskModalLayout();
     setRiskModalView('graph');
-    activateTab('risk');
+    activateTab(resolvedSourceTab);
 
     // Apply theme BEFORE showing modal content
     applyThemeToModal();
 
-    if (riskPanel) riskPanel.classList.remove('hidden');
+    if (closeBtn) closeBtn.textContent = 'Hide Risk Profile';
+    if (riskPanel) {
+        riskPanel.classList.remove('hidden');
+        riskPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    enforceRiskModalLayout();
     const metricsEl = document.getElementById('key-metrics');
     metricsEl.innerHTML = `<div class="col-span-4 text-center text-muted">Loading...</div>`;
     renderRiskTableLoading();
     renderSgpvLoading();
+    renderRiskChainContextUi(deriveRiskChainContext(targetLegs));
+    renderRiskChainPlaceholder('Loading option chain...');
+    renderRiskChainStatus('');
     syncSgpvAccountOptions(getSortedAccountsFromPortfolio());
     renderSgpvContextNote();
     clearRiskOverlayPanels();
+    const chainPromise = loadRiskOptionChain(targetLegs);
 
     if (!targetLegs || targetLegs.length === 0) {
         metricsEl.innerHTML = `<div class="text-red-500 col-span-4">No open legs to profile.</div>`;
@@ -2497,6 +2690,9 @@ async function showRiskProfile({comboIndex, legs, name}) {
         renderRiskTableLoading('No open legs to profile.');
         renderSgpvLoading('No open legs to profile.');
         renderSgpvContextNote();
+        renderRiskChainContextUi(null);
+        renderRiskChainPlaceholder('No open legs to profile.');
+        renderRiskChainStatus('');
         return;
     }
 
@@ -2537,6 +2733,7 @@ async function showRiskProfile({comboIndex, legs, name}) {
         if (riskChart) { riskChart.destroy(); riskChart = null; }
         clearRiskOverlayPanels();
     }
+    await chainPromise;
 }
 
 
@@ -2547,11 +2744,12 @@ function drawRiskChart() {
     const ctx = document.getElementById('risk-chart-canvas').getContext('2d');
     const css = getComputedStyle(document.documentElement);
     const colors = {
-        t0: '#37d1a8',
-        exp: '#5ac8ff',
-        t1: '#f59e0b',
-        t2: '#d946ef',
-        t3: '#fb7185',
+        t0: '#38bdf8',
+        exp: '#f8fafc',
+        t1: '#fbbf24',
+        t2: '#f43f5e',
+        t3: '#2563eb',
+        t4: '#84cc16',
         text: css.getPropertyValue('--text-primary').trim(),
         textMuted: css.getPropertyValue('--text-muted').trim(),
         zeroLine: css.getPropertyValue('--text-muted').trim(),
@@ -2580,7 +2778,7 @@ function drawRiskChart() {
         tension: 0.24,
         fill: { target: 'origin', above: 'rgba(56, 189, 248, 0.08)', below: 'rgba(239, 68, 68, 0.08)' }
     }];
-    const interColors = [colors.t1, colors.t2, colors.t3];
+    const interColors = [colors.t1, colors.t2, colors.t3, colors.t4];
     intermediateCurves.forEach((key, index) => {
         if (index < timeSteps.length) {
             datasets.push({
@@ -2590,7 +2788,7 @@ function drawRiskChart() {
                 borderWidth: 1.7,
                 pointRadius: 0,
                 tension: 0.24,
-                borderDash: [7, 6]
+                borderDash: []
             });
         }
     });
@@ -2691,7 +2889,13 @@ function drawRiskChart() {
         }
 
         const price = parseNumber(tooltip.dataPoints?.[0]?.parsed?.x, 0);
-        let innerHtml = `<div class="font-semibold text-center mb-1 border-b pb-1" style="border-color: ${colors.grid};">Price: $${formatNumber(price, 2)}</div><table>`;
+        const pctFromSpot = spot ? ((price - spot) / spot) * 100 : 0;
+        const nearestIdx = getNearestIndexByValue(priceRange, price);
+        const gDelta = parseNumber(data.greek_curves?.delta?.[nearestIdx], NaN);
+        const gGamma = parseNumber(data.greek_curves?.gamma?.[nearestIdx], NaN);
+        const gTheta = parseNumber(data.greek_curves?.theta?.[nearestIdx], NaN);
+        const gVega = parseNumber(data.greek_curves?.vega?.[nearestIdx], NaN);
+        let innerHtml = `<div class="font-semibold text-center mb-1 border-b pb-1" style="border-color: ${colors.grid};">Stock Price: $${formatNumber(price, 2)} (${pctFromSpot >= 0 ? '+' : ''}${pctFromSpot.toFixed(2)}%)</div><table>`;
         tooltip.body.forEach((item, i) => {
             const labelColors = tooltip.labelColors[i];
             const style = `background:${labelColors.borderColor}; border-radius:2px; display:inline-block; height:10px; width:10px; margin-right:6px;`;
@@ -2699,6 +2903,13 @@ function drawRiskChart() {
             const val = parseNumber(tooltip.dataPoints?.[i]?.parsed?.y, 0);
             innerHtml += `<tr><td><span style="${style}"></span> ${label}</td><td class="text-right font-medium pl-2">${formatCurrency(val, true)} <span class="text-muted">${formatPercentFromBasis(val, basis)}</span></td></tr>`;
         });
+        innerHtml += `
+            <tr><td colspan="2"><div class="mt-2 border-t pt-2 text-[11px] text-muted" style="border-color:${colors.grid};">Greeks (T+0)</div></td></tr>
+            <tr><td>Δ Delta</td><td class="text-right font-medium">${Number.isFinite(gDelta) ? formatNumber(gDelta, 0) : '—'}</td></tr>
+            <tr><td>Γ Gamma</td><td class="text-right font-medium">${Number.isFinite(gGamma) ? formatNumber(gGamma, 0) : '—'}</td></tr>
+            <tr><td>Θ Theta</td><td class="text-right font-medium">${Number.isFinite(gTheta) ? formatNumber(gTheta, 0) : '—'}</td></tr>
+            <tr><td>V Vega</td><td class="text-right font-medium">${Number.isFinite(gVega) ? formatNumber(gVega, 0) : '—'}</td></tr>
+        `;
         el.innerHTML = innerHtml + '</table>';
         updateRiskCrosshair(price);
         setRiskCursorChips(price, tooltip.dataPoints || [], basis);
@@ -2723,6 +2934,13 @@ function drawRiskChart() {
             animation: { duration: 220 },
             layout: { padding: { top: 22, right: 8, bottom: 6, left: 8 } },
             plugins: {
+                title: {
+                    display: true,
+                    text: 'Modeled Portfolio Exposure',
+                    color: colors.text,
+                    font: { family: "'Space Grotesk', sans-serif", size: 28, weight: '700' },
+                    padding: { top: 8, bottom: 10 }
+                },
                 legend: {
                     position: 'bottom',
                     labels: {
@@ -2753,13 +2971,15 @@ function drawRiskChart() {
                         autoSkipPadding: 18,
                         callback(value) {
                             const priceAtTick = parseNumber(value, NaN);
-                            return Number.isFinite(priceAtTick) ? formatNumber(priceAtTick, 0) : '';
+                            return Number.isFinite(priceAtTick) ? `$${formatNumber(priceAtTick, 0)}` : '';
                         }
                     }
                 },
                 xTop: {
                     type: 'linear',
                     position: 'top',
+                    min: priceRange[0],
+                    max: priceRange[priceRange.length - 1],
                     title: { display: true, text: 'Delta vs Spot', color: colors.textMuted },
                     grid: { display: false },
                     ticks: {
@@ -2818,19 +3038,66 @@ function updateKeyMetrics(m) {
 function setupInteractiveControls(legs, dte) {
     const ds = document.getElementById('date-slider'), dl = document.getElementById('date-slider-label');
     const is = document.getElementById('iv-slider'), il = document.getElementById('iv-slider-label');
+    const ivEnabledInput = document.getElementById('risk-iv-enabled');
+    const timeEnabledInput = document.getElementById('risk-time-enabled');
+    const adjustEnabledInput = document.getElementById('risk-adjust-enabled');
+    const adjustNote = document.getElementById('risk-adjust-note');
     const ivResetBtn = document.getElementById('iv-reset-btn');
     ds.max = dte > 0 ? dte : 1;
     ds.value = 0; dl.textContent = 'T+0'; is.value = 0; il.textContent = '+0%';
-    ds.disabled = dte <= 0;
-    is.disabled = false;
+    riskIvEnabled = true;
+    riskTimeEnabled = true;
+    riskAdjustmentEnabled = false;
+    if (ivEnabledInput) ivEnabledInput.checked = riskIvEnabled;
+    if (timeEnabledInput) timeEnabledInput.checked = riskTimeEnabled;
+    if (adjustEnabledInput) adjustEnabledInput.checked = riskAdjustmentEnabled;
+    ds.disabled = dte <= 0 || !riskTimeEnabled;
+    is.disabled = !riskIvEnabled;
+    if (adjustNote) {
+        adjustNote.textContent = 'Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.';
+    }
 
     const handler = () => {
-        const days = parseInt(ds.value), ivShift = parseInt(is.value) / 100.0;
+        const days = riskTimeEnabled ? parseInt(ds.value) : 0;
+        const ivShift = riskIvEnabled ? (parseInt(is.value) / 100.0) : 0;
         dl.textContent = `T+${days}`; il.textContent = `${is.value >= 0 ? '+' : ''}${is.value}%`;
         updatePnlCurve(legs, days, ivShift);
     };
     ds.oninput = handler;
     is.oninput = handler;
+
+    if (ivEnabledInput) {
+        ivEnabledInput.onchange = () => {
+            riskIvEnabled = !!ivEnabledInput.checked;
+            is.disabled = !riskIvEnabled;
+            if (!riskIvEnabled) {
+                is.value = 0;
+                il.textContent = '+0%';
+            }
+            handler();
+        };
+    }
+    if (timeEnabledInput) {
+        timeEnabledInput.onchange = () => {
+            riskTimeEnabled = !!timeEnabledInput.checked;
+            ds.disabled = dte <= 0 || !riskTimeEnabled;
+            if (!riskTimeEnabled) {
+                ds.value = 0;
+                dl.textContent = 'T+0';
+            }
+            handler();
+        };
+    }
+    if (adjustEnabledInput) {
+        adjustEnabledInput.onchange = () => {
+            riskAdjustmentEnabled = !!adjustEnabledInput.checked;
+            if (adjustNote) {
+                adjustNote.textContent = riskAdjustmentEnabled
+                    ? 'Adjustment mode enabled. Compare modeled overlays against baseline lines.'
+                    : 'Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.';
+            }
+        };
+    }
 
      if (ivResetBtn) {
          const newIvResetBtn = ivResetBtn.cloneNode(true);
@@ -2898,6 +3165,7 @@ async function updatePnlCurve(legs, days, iv_shift) {
 
 function updateAggregateGreeks(legs) {
     const g={delta:0,gamma:0,vega:0,theta:0};
+    let usedLiveGreeks = false;
     (legs || []).forEach(leg => {
         const tws = leg.tws_data || portfolioData[leg.conId];
         if(tws && (tws.status?.startsWith('Live') || tws.status === 'Snapshot')){
@@ -2906,8 +3174,17 @@ function updateAggregateGreeks(legs) {
             g.gamma += (tws.greeks?.gamma||0) * leg.qty * m;
             g.vega  += (tws.greeks?.vega||0) * leg.qty * m;
             g.theta += (tws.greeks?.theta||0) * leg.qty * m;
+            usedLiveGreeks = true;
         }
     });
+    if (!usedLiveGreeks && currentRiskProfileData && Array.isArray(currentRiskChartPriceRange) && currentRiskChartPriceRange.length) {
+        const spot = parseNumber(currentRiskProfileData?.metrics?.current_und_price, 0);
+        const idx = getNearestIndexByValue(currentRiskChartPriceRange, spot);
+        g.delta = parseNumber(currentRiskProfileData?.greek_curves?.delta?.[idx], 0);
+        g.gamma = parseNumber(currentRiskProfileData?.greek_curves?.gamma?.[idx], 0);
+        g.vega = parseNumber(currentRiskProfileData?.greek_curves?.vega?.[idx], 0);
+        g.theta = parseNumber(currentRiskProfileData?.greek_curves?.theta?.[idx], 0);
+    }
     const greeksEl = document.getElementById('aggregate-greeks');
     if (greeksEl) {
         greeksEl.innerHTML = `<div><span class="font-semibold">Net Δ:</span> ${coloredGreek(g.delta)}</div><div><span class="font-semibold">Net Γ:</span> ${coloredGreek(g.gamma)}</div><div><span class="font-semibold">Net ν:</span> ${coloredGreek(g.vega)}</div><div><span class="font-semibold">Net θ:</span> ${coloredGreek(g.theta)}</div>`;
@@ -2917,7 +3194,7 @@ function updateAggregateGreeks(legs) {
 function updateAggregatePnl(legs) {
     const pnlEl = document.getElementById('aggregate-pnl');
     if (!pnlEl) return;
-    let totalPnl = 0, dailyPnl = 0, totalCostBasis = 0;
+    let totalPnl = 0, dailyPnl = 0, totalCostBasis = 0, usedLivePnl = false;
     (legs || []).forEach(leg => {
         const twsLeg = leg.tws_data || portfolioData[leg.conId];
         if (twsLeg) {
@@ -2926,8 +3203,16 @@ function updateAggregatePnl(legs) {
              const ratio = twsLeg.position !== 0 ? leg.qty / twsLeg.position : 0;
              totalPnl += (twsLeg.marketValue * ratio) - legCostBasis;
              dailyPnl += (twsLeg.pnl?.daily || 0) * ratio;
+             usedLivePnl = true;
         }
     });
+    if (!usedLivePnl && currentRiskProfileData && Array.isArray(currentRiskChartPriceRange) && currentRiskChartPriceRange.length) {
+        const spot = parseNumber(currentRiskProfileData?.metrics?.current_und_price, 0);
+        const idx = getNearestIndexByValue(currentRiskChartPriceRange, spot);
+        totalPnl = parseNumber(currentRiskProfileData?.t0_pnl_curve?.[idx], 0);
+        totalCostBasis = getRiskReferenceCostBasis();
+        dailyPnl = 0;
+    }
     pnlEl.innerHTML = `
         <div><span class="font-semibold">Total P&L:</span> ${formatPnlWithPercent(totalPnl, totalCostBasis)}</div>
         <div><span class="font-semibold">Daily P&L:</span> ${formatPnlWithPercent(dailyPnl, totalCostBasis)}</div>`;

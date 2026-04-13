@@ -263,8 +263,10 @@ function initBuilderUI() {
 
     const clearHandler = () => clearBuilder();
     const placeHandler = () => placeBuilderOrder();
+    const openRiskHandler = () => openBuilderRiskWorkspace();
     ['builder-clear-btn', 'builder-clear-btn-mobile'].forEach((id) => bindClick(id, clearHandler));
     ['builder-place-btn', 'builder-place-btn-mobile'].forEach((id) => bindClick(id, placeHandler));
+    ['builder-open-risk-btn', 'builder-open-risk-btn-mobile'].forEach((id) => bindClick(id, openRiskHandler));
 
     renderChainTable([]); 
     renderBuilderLegs(); 
@@ -272,6 +274,59 @@ function initBuilderUI() {
     updateChainDiagnostics(null, []);
     maybeAutoFillBuilderLimitPrice(true);
     void loadBuilderAccounts();
+}
+
+function openBuilderRiskWorkspace() {
+    if (!Array.isArray(builderState.legs) || builderState.legs.length === 0) {
+        alert('Add at least one leg before showing the risk profile.');
+        return;
+    }
+
+    const riskLegs = builderState.legs
+        .map((leg) => {
+            const qtyAbs = Math.max(1, Math.abs(parseNum(leg.qty, 1)));
+            const signedQty = leg.side === 'BUY' ? qtyAbs : -qtyAbs;
+            const multiplier = Math.max(1, parseNum(leg.multiplier, 100));
+            const entry = parseNum(leg.entryPrice ?? leg.price, 0);
+            const conId = parseNum(leg.conId, NaN);
+            return {
+                conId,
+                qty: signedQty,
+                costBasis: entry * signedQty * multiplier,
+                secType: 'OPT',
+                right: String(leg.right || '').toUpperCase(),
+                strike: parseNum(leg.strike, NaN),
+                expiry: String(leg.expiry || ''),
+                iv: parseNum(leg.iv, 0),
+                multiplier,
+                symbol: builderState.symbol || '',
+                undPrice: parseNum(builderState.underlyingPrice, NaN),
+            };
+        })
+        .filter(
+            (leg) =>
+                Number.isFinite(leg.qty) &&
+                leg.qty !== 0 &&
+                Number.isFinite(leg.strike) &&
+                leg.strike > 0 &&
+                /^[0-9]{8}$/.test(leg.expiry) &&
+                (leg.right === 'C' || leg.right === 'P')
+        );
+
+    if (!riskLegs.length) {
+        alert('Unable to build risk legs from staged positions. Reload chain and re-add legs.');
+        return;
+    }
+
+    window.dispatchEvent(
+        new CustomEvent('builder-open-risk-workspace', {
+            detail: {
+                name: `${builderState.symbol || 'Builder'} Modeled Trade`,
+                legs: riskLegs,
+                sourceTab: 'builder',
+            },
+        })
+    );
 }
 
 async function onBuilderSearch() {
@@ -672,31 +727,141 @@ function drawBuilderChart(payload) {
     if (!payload) { ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height); return; }
 
     const cssVars = getComputedStyle(document.documentElement);
-    const axisColor = cssVars.getPropertyValue('--text-muted').trim() || '#9ca3af';
-    const legendColor = cssVars.getPropertyValue('--text-secondary').trim() || '#d1d5db';
+    const axisColor = cssVars.getPropertyValue('--text-primary').trim() || '#d1d5db';
+    const axisMuted = cssVars.getPropertyValue('--text-muted').trim() || '#9ca3af';
     const gridColor = cssVars.getPropertyValue('--border-color').trim() || 'rgba(255,255,255,0.1)';
-    
-    builderChart = new Chart(ctx, { 
-        type: 'line', 
-        data: { 
-            labels: payload.priceRange, 
-            datasets: [ 
-                { label: 'Expiration P&L', data: payload.expCurve, borderColor: '#f87171', borderWidth: 2, pointRadius: 0, borderDash: [5,5] }, 
-                { label: `T+${builderState.tPlusDays} P&L`, data: payload.t0Curve, borderColor: '#4ade80', borderWidth: 3, pointRadius: 0, fill: { target:'origin', above:'rgba(74,222,128,0.1)', below:'rgba(248,113,113,0.1)' } } 
-            ] 
+    const priceRange = Array.isArray(payload.priceRange) ? payload.priceRange : [];
+    const expCurve = Array.isArray(payload.expCurve) ? payload.expCurve : [];
+    const tCurve = Array.isArray(payload.t0Curve) ? payload.t0Curve : [];
+    const series = (curve) => priceRange.map((price, idx) => ({ x: parseNum(price, 0), y: parseNum(curve[idx], 0) }));
+    const allY = [...expCurve, ...tCurve].map((v) => parseNum(v, 0));
+    const minY = Math.min(0, ...allY);
+    const maxY = Math.max(0, ...allY);
+    const yPad = Math.max((maxY - minY) * 0.14, 80);
+    const yMin = minY - yPad;
+    const yMax = maxY + yPad;
+    const spot = parseNum(builderState.underlyingPrice, NaN);
+    const tPlusLabel = `T+${builderState.tPlusDays}`;
+    const formatAxisCurrency = (value) => {
+        const num = parseNum(value, NaN);
+        if (!Number.isFinite(num)) return '';
+        const abs = Math.abs(num);
+        if (abs >= 1_000_000) return `${num < 0 ? '-' : ''}$${(abs / 1_000_000).toFixed(1)}M`;
+        if (abs >= 1_000) return `${num < 0 ? '-' : ''}$${(abs / 1_000).toFixed(1)}K`;
+        return `${num < 0 ? '-' : ''}$${Math.round(abs)}`;
+    };
+
+    builderChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: tPlusLabel,
+                    data: series(tCurve),
+                    borderColor: '#38bdf8',
+                    borderWidth: 2.8,
+                    pointRadius: 0,
+                    tension: 0.26,
+                    fill: { target: 'origin', above: 'rgba(34, 211, 238, 0.09)', below: 'rgba(244, 63, 94, 0.08)' },
+                },
+                {
+                    label: 'Expiry',
+                    data: series(expCurve),
+                    borderColor: '#f8fafc',
+                    borderWidth: 2.35,
+                    pointRadius: 0,
+                    tension: 0.22,
+                },
+            ],
         },
-        options: { 
-            responsive:true, 
-            maintainAspectRatio:false, 
-            scales: { 
-                x:{ type:'linear', ticks:{color:axisColor, font:{size:10}}, grid:{color:gridColor}}, 
-                y:{ ticks:{color:axisColor, font:{size:10}}, grid:{color:gridColor} } 
-            }, 
-            plugins:{ 
-                legend:{ labels:{ color:legendColor} }, 
-                annotation:{ annotations:{ zero:{ type:'line', yMin:0, yMax:0, borderColor:axisColor, borderWidth:1, borderDash:[2,2] } } } 
-            } 
-        } 
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Modeled Portfolio Exposure',
+                    color: axisColor,
+                    font: { family: "'Space Grotesk', sans-serif", size: 24, weight: '700' },
+                    padding: { top: 8, bottom: 10 },
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: axisColor,
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 14,
+                        font: { family: "'IBM Plex Mono', monospace", size: 11, weight: '600' },
+                    },
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(2, 10, 24, 0.92)',
+                    borderColor: 'rgba(71, 85, 105, 0.65)',
+                    borderWidth: 1,
+                    titleColor: '#f8fafc',
+                    bodyColor: '#cbd5e1',
+                    displayColors: true,
+                    callbacks: {
+                        title(items) {
+                            const x = parseNum(items?.[0]?.parsed?.x, NaN);
+                            const pct = Number.isFinite(spot) && spot ? ((x - spot) / spot) * 100 : NaN;
+                            return Number.isFinite(x)
+                                ? `Stock Price: $${formatNum(x, 2)} (${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : 'N/A'})`
+                                : 'Stock Price';
+                        },
+                        label(item) {
+                            return `${item.dataset.label}: ${formatAxisCurrency(item.parsed?.y)}`;
+                        },
+                    },
+                },
+                annotation: {
+                    annotations: {
+                        zero: {
+                            type: 'line',
+                            yMin: 0,
+                            yMax: 0,
+                            borderColor: `${axisMuted}cc`,
+                            borderWidth: 1.2,
+                            borderDash: [4, 4],
+                        },
+                        spot: Number.isFinite(spot) ? {
+                            type: 'line',
+                            xMin: spot,
+                            xMax: spot,
+                            borderColor: '#fbbf24',
+                            borderWidth: 1.6,
+                            borderDash: [5, 4],
+                        } : undefined,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    min: priceRange[0],
+                    max: priceRange[priceRange.length - 1],
+                    title: { display: true, text: 'Underlying Price ($)', color: axisColor },
+                    ticks: {
+                        color: axisColor,
+                        callback(value) {
+                            const px = parseNum(value, NaN);
+                            return Number.isFinite(px) ? `$${formatNum(px, 0)}` : '';
+                        },
+                    },
+                    grid: { color: `${gridColor}90` },
+                },
+                y: {
+                    min: yMin,
+                    max: yMax,
+                    title: { display: true, text: 'Modeled P/L', color: axisColor },
+                    ticks: { color: axisColor, callback: (value) => formatAxisCurrency(value) },
+                    grid: { color: `${gridColor}90` },
+                },
+            },
+        },
     });
 }
 

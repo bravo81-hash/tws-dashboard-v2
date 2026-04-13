@@ -38,4 +38,6 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 - Strategy Builder spread math and breakeven precision were recently fixed and are covered by `tests/test_builder_profile_endpoint.py`.
 - Strategy Builder expiry + chain loading is now validated for `SPX`, `RUT`, `SPY`, and `IWM` (including non-`SPX` secdef fallback handling).
 - Option chain ladder columns were reordered to a strike-centered format with call/put volume + OI to match the requested workstation flow.
+- Risk profiling is now a unified shared workspace (`risk-panel`) used by both existing combos and modeled builder trades, including a left-rail options-chain panel.
+- See `docs/risk-workspace.md` for workflow and data-source behavior.
 - Core continuity docs are in `docs/superpowers/{status,startup,plans}`.

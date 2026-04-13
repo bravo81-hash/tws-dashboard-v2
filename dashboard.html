@@ -751,6 +751,195 @@
                 0 14px 36px rgba(2, 10, 24, 0.26);
             padding: 0.75rem;
         }
+        #risk-panel #risk-graph-view {
+            display: grid;
+            grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+            gap: 0.65rem;
+            align-items: start;
+        }
+        #risk-panel #risk-modeling-pane {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.55rem;
+            align-content: start;
+            grid-column: 1;
+            grid-row: 1 / span 4;
+            max-height: calc(100vh - 210px);
+            overflow: auto;
+            padding-right: 0.08rem;
+        }
+        #risk-panel #key-metrics {
+            display: none;
+        }
+        #risk-panel #key-metrics,
+        #risk-panel .risk-chart-shell,
+        #risk-panel #risk-greek-strips,
+        #risk-panel #risk-aggregate-row {
+            grid-column: 2;
+        }
+        #risk-panel .risk-modeling-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.55rem;
+        }
+        #risk-panel .risk-model-card {
+            border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            border-radius: 0.55rem;
+            background: color-mix(in srgb, var(--bg-secondary) 86%, #ffffff 14%);
+            padding: 0.52rem;
+        }
+        #risk-panel .risk-option-chain-card {
+            border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            border-radius: 0.55rem;
+            background: color-mix(in srgb, var(--bg-secondary) 86%, #ffffff 14%);
+            overflow: hidden;
+        }
+        #risk-panel .risk-option-chain-head {
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+            background: color-mix(in srgb, var(--bg-tertiary) 82%, #000 18%);
+            padding: 0.42rem 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.42rem;
+        }
+        #risk-panel .risk-option-chain-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+        #risk-panel .risk-option-chain-chip {
+            border: 1px solid rgba(14, 165, 233, 0.42);
+            border-radius: 9999px;
+            color: #67e8f9;
+            font-size: 10px;
+            font-family: 'IBM Plex Mono', monospace;
+            line-height: 1;
+            padding: 0.2rem 0.35rem;
+            background: rgba(14, 165, 233, 0.12);
+        }
+        #risk-panel .risk-chain-controls {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.4rem;
+            padding: 0.45rem 0.5rem 0.25rem;
+        }
+        #risk-panel .risk-chain-context {
+            border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+            border-radius: 0.42rem;
+            padding: 0.35rem 0.42rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            min-height: 30px;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        #risk-panel .risk-chain-window {
+            min-height: 30px;
+            font-size: 11px;
+            font-family: 'IBM Plex Mono', monospace;
+            padding: 0.26rem 0.35rem;
+        }
+        #risk-panel .risk-chain-table-wrap {
+            padding: 0.3rem 0.5rem 0.5rem;
+        }
+        #risk-panel .risk-chain-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            line-height: 1.12;
+        }
+        #risk-panel .risk-chain-table thead th {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 10px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 66%, transparent);
+            padding: 0.26rem 0.22rem;
+        }
+        #risk-panel .risk-chain-table td {
+            padding: 0.24rem 0.22rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+            white-space: nowrap;
+        }
+        #risk-panel .risk-chain-row-atm {
+            background: color-mix(in srgb, #0ea5e9 16%, transparent);
+        }
+        #risk-panel .risk-chain-cell-calls {
+            color: #34d399;
+        }
+        #risk-panel .risk-chain-cell-puts {
+            color: #f87171;
+        }
+        #risk-panel .risk-chain-status {
+            padding: 0.1rem 0.5rem 0.5rem;
+            min-height: 18px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+        #risk-panel .risk-model-card .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+        .builder-model-note {
+            border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+            border-radius: 0.45rem;
+            background: color-mix(in srgb, #0ea5e9 10%, var(--bg-tertiary) 90%);
+            color: var(--text-muted);
+            padding: 0.38rem 0.5rem;
+            font-size: 11px;
+            line-height: 1.3;
+        }
+        .mini-switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+        .mini-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .mini-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: color-mix(in srgb, var(--bg-hover) 84%, #000 16%);
+            transition: 0.2s ease;
+            border-radius: 9999px;
+            border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+        }
+        .mini-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            top: 2px;
+            background-color: #ffffff;
+            transition: 0.2s ease;
+            border-radius: 50%;
+        }
+        .mini-switch input:checked + .mini-slider {
+            background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+            border-color: rgba(14, 165, 233, 0.75);
+        }
+        .mini-switch input:checked + .mini-slider:before {
+            transform: translateX(18px);
+        }
         #risk-panel .risk-toolbar-dense {
             border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
             border-radius: 0.55rem;
@@ -764,7 +953,7 @@
             border-radius: 0.38rem;
         }
         #risk-panel .risk-chart-shell {
-            height: clamp(380px, 56vh, 730px);
+            height: clamp(400px, 58vh, 750px);
         }
         #risk-panel #key-metrics,
         #risk-panel #risk-table-summary,
@@ -866,6 +1055,17 @@
             }
             .builder-main-mid {
                 grid-template-columns: 1fr;
+            }
+            #risk-panel #risk-graph-view {
+                grid-template-columns: 1fr;
+            }
+            #risk-panel #risk-modeling-pane,
+            #risk-panel #key-metrics,
+            #risk-panel .risk-chart-shell,
+            #risk-panel #risk-greek-strips,
+            #risk-panel #risk-aggregate-row {
+                grid-column: 1;
+                grid-row: auto;
             }
         }
         @media (max-width: 768px) {
@@ -994,7 +1194,6 @@
                 <nav class="-mb-px flex space-x-4 md:space-x-6 text-sm md:text-base" aria-label="Tabs">
                     <button class="tab-btn active whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="portfolio">Portfolio</button>
                     <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="combos">Custom Combos</button>
-                    <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="risk">Risk Workspace</button>
                     <button class="tab-btn whitespace-nowrap py-2 md:py-3 px-1 font-medium" data-tab="builder">Strategy Builder</button>
                 </nav>
             </div>
@@ -1143,6 +1342,7 @@
                                 </div>
                             </div>
                             <div class="md:hidden mt-2 flex items-center gap-2">
+                                <button id="builder-open-risk-btn-mobile" class="btn-secondary text-xs flex-1">Risk Profile</button>
                                 <button id="builder-clear-btn-mobile" class="btn-secondary text-xs flex-1">Clear Ticket</button>
                                 <button id="builder-place-btn-mobile" class="btn-primary text-xs flex-1">Place Order</button>
                             </div>
@@ -1185,7 +1385,8 @@
                                                 <label class="block text-[10px] text-muted mb-1 uppercase tracking-wide">Net Limit Price</label>
                                                 <input type="number" id="builder-limit-price" step="0.01" value="0" class="input-styles w-full">
                                             </div>
-                                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                            <div class="grid grid-cols-3 gap-2 text-xs">
+                                                <button id="builder-open-risk-btn" class="btn-secondary text-xs">Risk</button>
                                                 <button id="builder-clear-btn" class="btn-secondary text-xs">Clear</button>
                                                 <button id="builder-place-btn" class="btn-primary text-xs">Place</button>
                                             </div>
@@ -1202,7 +1403,7 @@
 
                                 <div class="builder-main-right space-y-3">
                                     <div class="builder-pane">
-                                        <div class="builder-pane-head px-3 py-2">Payoff & Greeks</div>
+                                        <div class="builder-pane-head px-3 py-2">Modeled Portfolio Exposure</div>
                                         <div class="p-3 space-y-3">
                                             <div id="builder-metrics" class="grid grid-cols-2 gap-2 text-center"></div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1234,11 +1435,11 @@
     </div>
 
     <!-- Dedicated Risk Workspace -->
-    <section id="risk-panel" class="tab-panel hidden bg-secondary rounded-lg shadow-md p-4 md:p-6">
+    <section id="risk-panel" class="hidden bg-secondary rounded-lg shadow-md p-4 md:p-6 mt-4">
          <div id="risk-modal-content" class="risk-workstation rounded-lg w-full p-0">
             <div class="flex justify-between items-center mb-2">
                 <h2 id="modal-title" class="text-lg font-semibold text-primary">Risk Profile</h2>
-                <button id="modal-close-btn" class="btn-secondary text-xs md:text-sm">Back To Combos</button>
+                <button id="modal-close-btn" class="btn-secondary text-xs md:text-sm">Hide Risk Profile</button>
             </div>
             <div id="modal-body" class="space-y-3">
                 <div class="risk-toolbar-dense flex items-center gap-2">
@@ -1256,17 +1457,53 @@
                         <div id="risk-legs-panel" class="risk-overlay-panel risk-overlay-right"></div>
                         <div id="risk-cursor-chips" class="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1.5 pointer-events-none"></div>
                     </div>
-                    <div class="risk-toolbar-dense grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 p-2 rounded-lg bg-tertiary">
-                        <div>
-                            <div class="flex justify-between items-center text-xs text-muted">
-                                <label for="date-slider">Date Adjustment</label>
-                                <span id="date-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">T+0</span>
+                    <div id="risk-modeling-pane" class="risk-modeling-grid">
+                        <div class="risk-option-chain-card">
+                            <div class="risk-option-chain-head">
+                                <div class="risk-option-chain-title">Options Chain</div>
+                                <div id="risk-chain-dte-chip" class="risk-option-chain-chip">-- DTE</div>
                             </div>
-                            <input type="range" id="date-slider" min="0" max="1" value="0">
+                            <div class="risk-chain-controls">
+                                <div id="risk-chain-context" class="risk-chain-context">Select a profile to load chain.</div>
+                                <select id="risk-chain-window" class="input-styles risk-chain-window">
+                                    <option value="4">8 strikes</option>
+                                    <option value="5" selected>10 strikes</option>
+                                    <option value="6">12 strikes</option>
+                                    <option value="8">16 strikes</option>
+                                    <option value="10">20 strikes</option>
+                                </select>
+                            </div>
+                            <div class="risk-chain-table-wrap">
+                                <table class="risk-chain-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Call Δ</th>
+                                            <th class="text-left">Call</th>
+                                            <th class="text-center">Strike</th>
+                                            <th class="text-right">Put</th>
+                                            <th class="text-right">Put Δ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="risk-chain-table-body">
+                                        <tr><td colspan="5" class="text-center text-muted py-2">No chain loaded.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="risk-chain-status" class="risk-chain-status"></div>
                         </div>
-                        <div>
-                            <div class="flex justify-between items-center text-xs text-muted">
-                                <label for="iv-slider">"What-If" IV Change</label>
+                        <div class="risk-model-card space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <div class="label">IV Modeling</div>
+                                    <div class="text-xs text-muted">Shift implied volatility across the profile.</div>
+                                </div>
+                                <label class="mini-switch">
+                                    <input id="risk-iv-enabled" type="checkbox" checked>
+                                    <span class="mini-slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 text-xs text-muted">
+                                <span>IV Shift</span>
                                 <div class="flex items-center gap-1">
                                     <span id="iv-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">+0%</span>
                                     <button id="iv-reset-btn" title="Reset IV Change" class="text-muted hover:text-primary">
@@ -1275,6 +1512,36 @@
                                 </div>
                             </div>
                             <input type="range" id="iv-slider" min="-50" max="50" value="0" step="1">
+                        </div>
+                        <div class="risk-model-card space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <div class="label">Time Modeling</div>
+                                    <div class="text-xs text-muted">Project the curve to a forward horizon.</div>
+                                </div>
+                                <label class="mini-switch">
+                                    <input id="risk-time-enabled" type="checkbox" checked>
+                                    <span class="mini-slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 text-xs text-muted">
+                                <label for="date-slider">Target Date</label>
+                                <span id="date-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">T+0</span>
+                            </div>
+                            <input type="range" id="date-slider" min="0" max="1" value="0">
+                        </div>
+                        <div class="risk-model-card space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <div class="label">Adjustment Modeling</div>
+                                    <div class="text-xs text-muted">Compare active curve versus baseline behavior.</div>
+                                </div>
+                                <label class="mini-switch">
+                                    <input id="risk-adjust-enabled" type="checkbox">
+                                    <span class="mini-slider"></span>
+                                </label>
+                            </div>
+                            <div id="risk-adjust-note" class="builder-model-note">Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.</div>
                         </div>
                     </div>
 
@@ -1297,7 +1564,7 @@
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div id="risk-aggregate-row" class="flex flex-wrap items-center justify-between gap-2 text-xs">
                          <div class="flex items-center flex-wrap gap-x-3 gap-y-1">
                              <div id="aggregate-greeks" class="flex items-center gap-x-3 border-r border-border-color pr-3"></div>
                              <div id="aggregate-pnl" class="flex items-center gap-x-3"></div>

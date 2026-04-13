@@ -106,39 +106,120 @@ def build_legs_with_details(profile_legs, require_live=True):
         for leg_req in profile_legs:
             if not isinstance(leg_req, dict):
                 continue
-            con_id = leg_req.get("conId")
+            raw_con_id = leg_req.get("conId")
+            con_id = None
+            if isinstance(raw_con_id, int):
+                con_id = raw_con_id
+            elif isinstance(raw_con_id, float) and raw_con_id.is_integer():
+                con_id = int(raw_con_id)
+            else:
+                parsed_con_id = safe_float(raw_con_id, None)
+                if (
+                    parsed_con_id is not None
+                    and math.isfinite(parsed_con_id)
+                    and float(parsed_con_id).is_integer()
+                ):
+                    con_id = int(parsed_con_id)
             qty = safe_float(leg_req.get("qty"), None)
-            if not isinstance(con_id, int) or qty is None:
+            if qty is None:
                 continue
-            tws_data = portfolio_data.get(con_id)
-            if not tws_data:
-                continue
-            if require_live and not status_is_live_or_snapshot(tws_data):
-                continue
+            tws_data = portfolio_data.get(con_id) if con_id is not None else None
 
-            legs_with_details.append(
-                {
+            sec_type = str(leg_req.get("secType", "OPT")).upper().strip() or "OPT"
+            strike = safe_float(leg_req.get("strike"), None)
+            right = str(leg_req.get("right", "")).upper().strip()
+            expiry = str(leg_req.get("expiry", "")).strip()
+            multiplier = safe_float(leg_req.get("multiplier"), 100.0)
+            iv = safe_float(leg_req.get("iv"), 0.0)
+            und_price = safe_float(leg_req.get("undPrice"), None)
+
+            synthetic_leg = None
+            if (
+                sec_type == "OPT"
+                and strike is not None
+                and math.isfinite(strike)
+                and strike > 0
+                and right in ("C", "P")
+                and len(expiry) == 8
+                and expiry.isdigit()
+            ):
+                synthetic_leg = {
                     "conId": con_id,
                     "qty": qty,
-                    "costBasis": derive_cost_basis_for_qty(
-                        tws_data, qty, leg_req.get("costBasis")
-                    ),
-                    "tws_data": tws_data,
+                    "costBasis": safe_float(leg_req.get("costBasis"), 0.0),
+                    "secType": "OPT",
+                    "symbol": str(leg_req.get("symbol", "")).strip(),
+                    "right": right,
+                    "strike": float(strike),
+                    "expiry": expiry,
+                    "iv": max(iv, 0.0),
+                    "multiplier": max(multiplier, 1.0),
+                    "undPrice": und_price if und_price and und_price > 0 else None,
                 }
-            )
+
+            if tws_data:
+                contract = (
+                    tws_data.get("contract", {}) if isinstance(tws_data, dict) else {}
+                )
+                sec_type_live = str(contract.get("secType", "")).upper().strip()
+                strike_live = safe_float(contract.get("strike"), None)
+                right_live = str(contract.get("right", "")).upper().strip()
+                expiry_live = str(contract.get("expiry", "")).strip()
+                live_is_option_ready = sec_type_live != "OPT" or (
+                    strike_live is not None
+                    and math.isfinite(strike_live)
+                    and strike_live > 0
+                    and right_live in ("C", "P")
+                    and len(expiry_live) == 8
+                    and expiry_live.isdigit()
+                )
+                is_live_ready = (
+                    not require_live or status_is_live_or_snapshot(tws_data)
+                ) and live_is_option_ready
+                if is_live_ready:
+                    legs_with_details.append(
+                        {
+                            "conId": con_id,
+                            "qty": qty,
+                            "costBasis": derive_cost_basis_for_qty(
+                                tws_data, qty, leg_req.get("costBasis")
+                            ),
+                            "tws_data": tws_data,
+                        }
+                    )
+                    continue
+
+                if synthetic_leg:
+                    legs_with_details.append(synthetic_leg)
+                continue
+
+            if synthetic_leg:
+                legs_with_details.append(synthetic_leg)
     return legs_with_details
 
 
 def resolve_underlying_price(legs_with_details):
     for leg in legs_with_details:
-        und_price = safe_float(leg["tws_data"].get("greeks", {}).get("undPrice"), None)
+        tws_data = leg.get("tws_data")
+        if not tws_data:
+            continue
+        und_price = safe_float(tws_data.get("greeks", {}).get("undPrice"), None)
+        if und_price is not None and und_price > 0:
+            return und_price
+
+    for leg in legs_with_details:
+        und_price = safe_float(leg.get("undPrice"), None)
         if und_price is not None and und_price > 0:
             return und_price
 
     if not legs_with_details:
         return None
 
-    symbol = legs_with_details[0]["tws_data"].get("contract", {}).get("symbol")
+    first = legs_with_details[0]
+    symbol = (
+        first.get("tws_data", {}).get("contract", {}).get("symbol")
+        or first.get("symbol")
+    )
     cached = underlying_prices.get(symbol)
     if isinstance(cached, dict):
         bid = safe_float(cached.get("bid"), None)
@@ -391,19 +472,29 @@ def maybe_qualify_underlying_conid(ib_client, contract, timeout_sec=10):
 
 
 def compute_days_to_expiry(legs_with_details):
-    option_legs = [
-        l
-        for l in legs_with_details
-        if l.get("tws_data", {}).get("contract", {}).get("secType") == "OPT"
-    ]
+    option_legs = []
+    for leg in legs_with_details:
+        contract = (
+            leg.get("tws_data", {}).get("contract") if leg.get("tws_data") else leg
+        )
+        if (contract or {}).get("secType", "OPT") == "OPT":
+            option_legs.append(leg)
     if not option_legs:
         return 0
 
     try:
         earliest_expiry_str = min(
-            l["tws_data"]["contract"]["expiry"]
+            (
+                l["tws_data"]["contract"]["expiry"]
+                if l.get("tws_data")
+                else l.get("expiry")
+            )
             for l in option_legs
-            if l.get("tws_data", {}).get("contract", {}).get("expiry")
+            if (
+                l.get("tws_data", {}).get("contract", {}).get("expiry")
+                if l.get("tws_data")
+                else l.get("expiry")
+            )
         )
         if not earliest_expiry_str:
             return 0
@@ -2254,133 +2345,145 @@ def get_option_chain():
 
 @app.route("/get_risk_profile", methods=["POST"])
 def get_risk_profile():
-    data = request.get_json(silent=True) or {}
-    profile_legs = data.get("legs")
+    try:
+        data = request.get_json(silent=True) or {}
+        profile_legs = data.get("legs")
 
-    print("\n--- Generating Risk Profile ---")
-    print(f"Received {len(profile_legs or [])} legs for profiling.")
+        print("\n--- Generating Risk Profile ---")
+        print(f"Received {len(profile_legs or [])} legs for profiling.")
 
-    legs_with_details = build_legs_with_details(profile_legs, require_live=True)
+        legs_with_details = build_legs_with_details(profile_legs, require_live=True)
 
-    if not legs_with_details:
-        return jsonify(
-            {
-                "error": "No valid (Live or Snapshot) legs found in portfolio for profiling."
-            }
-        ), 404
+        if not legs_with_details:
+            return jsonify(
+                {
+                    "error": "No valid (Live or Snapshot) legs found in portfolio for profiling."
+                }
+            ), 404
 
-    und_price = resolve_underlying_price(legs_with_details)
-    if not und_price:
-        print(
-            "  Error: Underlying price not available in any profiled leg's greek data or cache."
+        und_price = resolve_underlying_price(legs_with_details)
+        if not und_price:
+            print(
+                "  Error: Underlying price not available in any profiled leg's greek data or cache."
+            )
+            return jsonify(
+                {"error": "Underlying price not available for profiled legs."}
+            ), 404
+
+        print(f"  Using Underlying Price: {und_price:.2f}")
+
+        def _contract_from_leg(leg):
+            if leg.get("tws_data"):
+                return leg.get("tws_data", {}).get("contract", {})
+            return leg
+
+        strikes = [
+            safe_float(_contract_from_leg(l).get("strike"), None)
+            for l in legs_with_details
+            if safe_float(_contract_from_leg(l).get("strike"), None) is not None
+        ]
+        points_of_interest = [s for s in strikes if s is not None] + [und_price]
+        min_point = min(points_of_interest) if points_of_interest else und_price * 0.8
+        max_point = max(points_of_interest) if points_of_interest else und_price * 1.2
+
+        if min_point == max_point:
+            min_point = und_price * 0.8
+            max_point = und_price * 1.2
+
+        price_buffer = (max_point - min_point) * 0.3
+        min_buffer = und_price * 0.1
+        price_buffer = max(price_buffer, min_buffer)
+
+        lo = max(0, min_point - price_buffer)
+        hi = max_point + price_buffer
+        price_range = np.linspace(lo, hi, 150).tolist()
+        # print(f"  Price Range: {lo:.2f} to {hi:.2f}")
+
+        dte = compute_days_to_expiry(legs_with_details)
+
+        # print(f"  Calculated DTE: {dte} days")
+
+        # print("  Calculating P/L curves...")
+        t0_pnl = calculate_pnl_curve(legs_with_details, price_range, days_to_add=0)
+        exp_pnl = calculate_expiration_pnl(legs_with_details, price_range)
+        greek_curves = {
+            "delta": calculate_greek_surface(
+                legs_with_details, price_range, [0], "delta"
+            )[0],
+            "gamma": calculate_greek_surface(
+                legs_with_details, price_range, [0], "gamma"
+            )[0],
+            "vega": calculate_greek_surface(legs_with_details, price_range, [0], "vega")[
+                0
+            ],
+            "theta": calculate_greek_surface(
+                legs_with_details, price_range, [0], "theta"
+            )[0],
+        }
+
+        time_steps = [
+            int(round(dte * p)) for p in [0.25, 0.50, 0.75] if int(round(dte * p)) > 0
+        ]
+        intermediate_curves = {
+            f"t{step}_pnl": calculate_pnl_curve(
+                legs_with_details, price_range, days_to_add=step
+            )
+            for step in time_steps
+        }
+        # print(f"  Intermediate time steps: {time_steps}")
+
+        # print("  Calculating metrics...")
+        breakevens = find_breakevens(price_range, exp_pnl)
+        finite_exp_pnl = [p for p in exp_pnl if p is not None and math.isfinite(p)]
+
+        net_calls = sum(
+            l["qty"]
+            for l in legs_with_details
+            if str(_contract_from_leg(l).get("right", "")).upper() == "C"
         )
-        return jsonify(
-            {"error": "Underlying price not available for profiled legs."}
-        ), 404
-
-    print(f"  Using Underlying Price: {und_price:.2f}")
-
-    strikes = [
-        l["tws_data"]["contract"].get("strike")
-        for l in legs_with_details
-        if l["tws_data"]["contract"].get("strike")
-    ]
-    points_of_interest = [s for s in strikes if s is not None] + [und_price]
-    min_point = min(points_of_interest) if points_of_interest else und_price * 0.8
-    max_point = max(points_of_interest) if points_of_interest else und_price * 1.2
-
-    if min_point == max_point:
-        min_point = und_price * 0.8
-        max_point = und_price * 1.2
-
-    price_buffer = (max_point - min_point) * 0.3
-    min_buffer = und_price * 0.1
-    price_buffer = max(price_buffer, min_buffer)
-
-    lo = max(0, min_point - price_buffer)
-    hi = max_point + price_buffer
-    price_range = np.linspace(lo, hi, 150).tolist()
-    # print(f"  Price Range: {lo:.2f} to {hi:.2f}")
-
-    dte = compute_days_to_expiry(legs_with_details)
-
-    # print(f"  Calculated DTE: {dte} days")
-
-    # print("  Calculating P/L curves...")
-    t0_pnl = calculate_pnl_curve(legs_with_details, price_range, days_to_add=0)
-    exp_pnl = calculate_expiration_pnl(legs_with_details, price_range)
-    greek_curves = {
-        "delta": calculate_greek_surface(legs_with_details, price_range, [0], "delta")[
-            0
-        ],
-        "gamma": calculate_greek_surface(legs_with_details, price_range, [0], "gamma")[
-            0
-        ],
-        "vega": calculate_greek_surface(legs_with_details, price_range, [0], "vega")[0],
-        "theta": calculate_greek_surface(legs_with_details, price_range, [0], "theta")[
-            0
-        ],
-    }
-
-    time_steps = [
-        int(round(dte * p)) for p in [0.25, 0.50, 0.75] if int(round(dte * p)) > 0
-    ]
-    intermediate_curves = {
-        f"t{step}_pnl": calculate_pnl_curve(
-            legs_with_details, price_range, days_to_add=step
+        net_puts = sum(
+            l["qty"]
+            for l in legs_with_details
+            if str(_contract_from_leg(l).get("right", "")).upper() == "P"
         )
-        for step in time_steps
-    }
-    # print(f"  Intermediate time steps: {time_steps}")
 
-    # print("  Calculating metrics...")
-    breakevens = find_breakevens(price_range, exp_pnl)
-    finite_exp_pnl = [p for p in exp_pnl if p is not None and math.isfinite(p)]
+        has_unlimited_profit = (net_calls > 0) or (net_puts < 0)
+        has_unlimited_loss = (net_calls < 0) or (net_puts > 0)
 
-    net_calls = sum(
-        l["qty"]
-        for l in legs_with_details
-        if l["tws_data"]["contract"].get("right") == "C"
-    )
-    net_puts = sum(
-        l["qty"]
-        for l in legs_with_details
-        if l["tws_data"]["contract"].get("right") == "P"
-    )
+        max_profit_val = (
+            "Unlimited"
+            if has_unlimited_profit
+            else (round(float(np.max(finite_exp_pnl)), 2) if finite_exp_pnl else 0)
+        )
+        max_loss_val = (
+            "Unlimited"
+            if has_unlimited_loss
+            else (round(float(np.min(finite_exp_pnl)), 2) if finite_exp_pnl else 0)
+        )
 
-    has_unlimited_profit = (net_calls > 0) or (net_puts < 0)
-    has_unlimited_loss = (net_calls < 0) or (net_puts > 0)
+        # print(f"  Max Profit: {max_profit_val}, Max Loss: {max_loss_val}, Breakevens: {breakevens}")
 
-    max_profit_val = (
-        "Unlimited"
-        if has_unlimited_profit
-        else (round(float(np.max(finite_exp_pnl)), 2) if finite_exp_pnl else 0)
-    )
-    max_loss_val = (
-        "Unlimited"
-        if has_unlimited_loss
-        else (round(float(np.min(finite_exp_pnl)), 2) if finite_exp_pnl else 0)
-    )
-
-    # print(f"  Max Profit: {max_profit_val}, Max Loss: {max_loss_val}, Breakevens: {breakevens}")
-
-    response_data = {
-        "price_range": [round(p, 2) for p in price_range],
-        "t0_pnl_curve": t0_pnl,
-        "exp_pnl_curve": exp_pnl,
-        "greek_curves": greek_curves,
-        "intermediate_curves": intermediate_curves,
-        "metrics": {
-            "current_und_price": round(und_price, 2),
-            "max_profit": max_profit_val,
-            "max_loss": max_loss_val,
-            "breakevens_exp": breakevens,
-            "days_to_expiry": dte,
-            "time_steps": time_steps,
-        },
-    }
-    # print("--- Risk Profile Generation Complete ---")
-    return jsonify(response_data)
+        response_data = {
+            "price_range": [round(p, 2) for p in price_range],
+            "t0_pnl_curve": t0_pnl,
+            "exp_pnl_curve": exp_pnl,
+            "greek_curves": greek_curves,
+            "intermediate_curves": intermediate_curves,
+            "metrics": {
+                "current_und_price": round(und_price, 2),
+                "max_profit": max_profit_val,
+                "max_loss": max_loss_val,
+                "breakevens_exp": breakevens,
+                "days_to_expiry": dte,
+                "time_steps": time_steps,
+            },
+        }
+        # print("--- Risk Profile Generation Complete ---")
+        return jsonify(response_data)
+    except Exception as exc:
+        print(f"Error while building risk profile: {exc}")
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to fetch risk profile: {exc}"}), 500
 
 
 @app.route("/get_pnl_by_date", methods=["POST"])
@@ -2614,8 +2717,11 @@ def get_sgpv_sim():
         legs_with_details = [
             leg
             for leg in legs_with_details
-            if str(leg.get("tws_data", {}).get("account", "")).strip()
-            == selected_account
+            if (
+                not leg.get("tws_data")
+                or str(leg.get("tws_data", {}).get("account", "")).strip()
+                == selected_account
+            )
         ]
         if not legs_with_details:
             return jsonify(
@@ -2743,8 +2849,11 @@ def get_account_risk_context():
         legs_for_estimate = [
             leg
             for leg in legs_for_estimate
-            if str(leg.get("tws_data", {}).get("account", "")).strip()
-            == selected_account
+            if (
+                not leg.get("tws_data")
+                or str(leg.get("tws_data", {}).get("account", "")).strip()
+                == selected_account
+            )
         ]
 
     selected_legs_estimate = (
