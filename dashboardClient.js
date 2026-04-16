@@ -1586,23 +1586,10 @@ function updateComboAggregation() {
 
     let rowHtml;
 
-    if (selectedCombos.size === 0) {
-        rowHtml = `
-            <tr class="bg-tertiary/10 border-b-2 border-border-color">
-                <td class="p-2"></td>
-                <td class="p-2 text-left font-semibold text-muted">Selected Totals (0)</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center text-muted">---</td>
-                <td class="p-2 text-center"></td>
-                <td class="p-2 text-center"></td>
-                <td class="p-2 text-center"></td>
-            </tr>
-        `;
+    // Only show aggregation row when 2+ combos are selected — avoids redundant display with single-combo rows
+    if (selectedCombos.size <= 1) {
+        aggBody.innerHTML = '';
+        return;
     } else {
         const agg = { costBasis: 0, totalReturn: 0, dailyPnl: 0, delta: 0, theta: 0, vega: 0, gamma: 0 };
         selectedCombos.forEach(comboIndex => {
@@ -1730,9 +1717,7 @@ function formatPercentFromBasis(value, basis) {
 }
 
 function clearRiskOverlayPanels() {
-    const curvePanel = document.getElementById('risk-curve-panel');
     const legsPanel = document.getElementById('risk-legs-panel');
-    if (curvePanel) curvePanel.innerHTML = '';
     if (legsPanel) legsPanel.innerHTML = '';
     currentRiskCrosshairPrice = null;
     currentRiskCrosshairIndex = -1;
@@ -1884,29 +1869,35 @@ function drawRiskStripCharts(priceRange, greekCurves, pnlCurve, markerPrice) {
         const canvas = document.getElementById(def.id);
         const values = currentRiskStripSeries[def.key];
         if (!canvas || !Array.isArray(values) || values.length === 0) return;
-        canvas.style.height = '38px';
+        canvas.style.height = '68px';
         canvas.style.width = '100%';
         const ctx = canvas.getContext('2d');
         const series = priceRange.map((price, index) => ({
             x: parseNumber(price, 0),
             y: parseNumber(values[index], 0),
         }));
+        // Gradient fill for the strip area
+        const gradFill = ctx.createLinearGradient(0, 0, 0, 68);
+        gradFill.addColorStop(0, def.color + '28');
+        gradFill.addColorStop(1, def.color + '04');
         riskStripCharts[def.key] = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [{
                     data: series,
                     borderColor: def.color,
-                    borderWidth: 1.6,
+                    borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.28,
-                    fill: false
+                    fill: { target: 'origin', above: gradFill, below: gradFill }
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
                 animation: false,
+                layout: { padding: { top: 32, bottom: 4, left: 0, right: 0 } },
                 plugins: {
                     legend: { display: false },
                     tooltip: { enabled: false },
@@ -2571,24 +2562,7 @@ async function loadSgpvData(legs, metrics) {
 }
 
 function renderRiskCurvePanel(chartData, spotIndex, basis) {
-    const panel = document.getElementById('risk-curve-panel');
-    if (!panel || !chartData || spotIndex < 0) return;
-
-    let html = '<div class="risk-overlay-title">Curves @ Spot</div>';
-    chartData.datasets.forEach((dataset) => {
-        const rawValue = dataset.data?.[spotIndex];
-        const valueAtSpot = parseNumber(
-            rawValue && typeof rawValue === 'object' ? rawValue.y : rawValue,
-            0
-        );
-        html += `
-            <div class="risk-overlay-row">
-                <span class="risk-overlay-dot" style="color:${dataset.borderColor}; background:${dataset.borderColor};"></span>
-                <span class="truncate">${dataset.label}</span>
-                <span class="font-mono">${formatCurrency(valueAtSpot, true)} <span class="text-muted">${formatPercentFromBasis(valueAtSpot, basis)}</span></span>
-            </div>`;
-    });
-    panel.innerHTML = html;
+    // Removed — curve values are shown in the tooltip instead
 }
 
 function renderRiskLegsPanel(legs) {
@@ -2624,6 +2598,257 @@ function renderRiskLegsPanel(legs) {
             </div>`;
     });
     panel.innerHTML = html;
+}
+
+// ========================================================================================
+// --- TIME MODEL DATE LINE ROWS ---
+// ========================================================================================
+function renderTimeModelLines(datasets) {
+    const linesEl = document.getElementById('risk-time-lines');
+    const legendEl = document.getElementById('risk-time-legend-dots');
+    if (!linesEl) return;
+
+    if (!datasets || datasets.length === 0) {
+        linesEl.innerHTML = '<div class="text-[10px] text-muted px-0.5">No time curves available.</div>';
+        if (legendEl) legendEl.innerHTML = '';
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let html = '', legendHtml = '', hasLines = false;
+
+    datasets.forEach((ds, idx) => {
+        const label = String(ds.label || '');
+        if (label === 'T+0' || label.startsWith('Expiry')) return;
+        const daysMatch = label.match(/T\+(\d+)/);
+        if (!daysMatch) return;
+
+        hasLines = true;
+        const days = parseInt(daysMatch[1], 10);
+        const color = ds.borderColor || '#94a3b8';
+        const isHidden = ds.hidden || false;
+
+        const targetDate = new Date(today.getTime() + days * 86400000);
+        const inputDateStr = targetDate.toISOString().slice(0, 10);
+        const shortDate = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        legendHtml += `<span class="risk-time-dot" style="background:${color}; box-shadow: 0 0 5px ${color}66;" title="${label} — ${shortDate}"></span>`;
+
+        const eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" style="width:11px;height:11px;display:inline;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>`;
+
+        html += `
+            <div class="risk-time-line-row${isHidden ? ' risk-time-line-hidden' : ''}" data-ds-index="${idx}" data-days="${days}">
+                <span class="risk-time-dot" style="background:${color};"></span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="risk-time-cal-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <input type="date" class="risk-time-date-input" value="${inputDateStr}" data-ds-index="${idx}" title="${label} — ${shortDate}">
+                <span class="risk-time-days-badge">${days}d</span>
+                <button class="risk-time-toggle-btn" data-ds-index="${idx}" title="${isHidden ? 'Show curve' : 'Hide curve'}" type="button">
+                    ${isHidden ? eyeOpen : '×'}
+                </button>
+            </div>`;
+    });
+
+    if (!hasLines) {
+        linesEl.innerHTML = '<div class="text-[10px] text-muted px-0.5">No intermediate time curves loaded.</div>';
+        if (legendEl) legendEl.innerHTML = '';
+        return;
+    }
+    linesEl.innerHTML = html;
+    if (legendEl) legendEl.innerHTML = legendHtml;
+
+    // Wire date change events
+    linesEl.querySelectorAll('.risk-time-date-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const row = e.target.closest('.risk-time-line-row');
+            if (!row) return;
+            const dsIndex = parseInt(row.dataset.dsIndex, 10);
+            const selectedDate = new Date(e.target.value + 'T00:00:00');
+            const now = new Date(); now.setHours(0,0,0,0);
+            const days = Math.max(0, Math.round((selectedDate.getTime() - now.getTime()) / 86400000));
+            row.dataset.days = days;
+            const badge = row.querySelector('.risk-time-days-badge');
+            if (badge) badge.textContent = days + 'd';
+            if (riskTimeEnabled && currentRiskProfileLegs && riskChart) {
+                const ivShift = parseInt(document.getElementById('iv-slider')?.value || '0', 10) / 100.0;
+                updatePnlCurveAtIndex(dsIndex, currentRiskProfileLegs, days, ivShift);
+            }
+        });
+    });
+
+    // Wire hide/show toggle buttons
+    linesEl.querySelectorAll('.risk-time-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dsIndex = parseInt(btn.dataset.dsIndex, 10);
+            if (riskChart?.data?.datasets?.[dsIndex]) {
+                riskChart.data.datasets[dsIndex].hidden = !riskChart.data.datasets[dsIndex].hidden;
+                riskChart.update('none');
+                renderTimeModelLines(riskChart.data.datasets);
+            }
+        });
+    });
+}
+
+async function updatePnlCurveAtIndex(dsIndex, legs, days, iv_shift) {
+    if (!riskChart || !currentRiskChartPriceRange) return;
+    try {
+        const payload = { legs, days_to_add: days, iv_shift, price_range: currentRiskChartPriceRange };
+        const res = await fetch(`${API_BASE_URL}/get_pnl_by_date`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error('Curve fetch failed');
+        const data = await res.json();
+        const priceRange = currentRiskChartPriceRange || [];
+        const mappedCurve = priceRange.map((price, i) => ({ x: parseNumber(price, 0), y: parseNumber(data.pnl_curve?.[i], 0) }));
+        riskChart.data.datasets[dsIndex].data = mappedCurve;
+        riskChart.data.datasets[dsIndex].label = `T+${days}`;
+        riskChart.update('none');
+        renderTimeModelLines(riskChart.data.datasets);
+        const spot = parseNumber(currentRiskProfileData?.metrics?.current_und_price, 0);
+        const spotIdx = getNearestIndexByValue(priceRange, spot);
+        renderRiskCurvePanel(riskChart.data, spotIdx, getRiskReferenceCostBasis());
+    } catch (e) { console.error('updatePnlCurveAtIndex failed:', e); }
+}
+
+// ========================================================================================
+// --- RISK POSITION STRIP ---
+// ========================================================================================
+function renderRiskPositionStrip(legs, profileName) {
+    const strip = document.getElementById('risk-position-strip');
+    const tbody = document.getElementById('risk-pos-table-body');
+    const nameLabel = document.getElementById('risk-pos-name-label');
+    if (!strip || !tbody) return;
+
+    if (!legs || legs.length === 0) { strip.classList.add('hidden'); return; }
+    strip.classList.remove('hidden');
+
+    if (nameLabel) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        nameLabel.textContent = `${escapeHtml(profileName || '—')} · Last Saved: ${dateStr}, ${timeStr}`;
+    }
+
+    let html = '';
+    legs.forEach(leg => {
+        const tws = portfolioData[leg.conId] || leg.tws_data;
+        const contract = tws?.contract || {};
+        const ticker = contract.symbol || '—';
+        const secType = String(contract.secType || 'OPT').toUpperCase();
+        const right = String(contract.right || '').toUpperCase();
+        const typeLabel = secType === 'STK' ? 'STOCK' : (right === 'C' ? 'CALL' : right === 'P' ? 'PUT' : secType);
+        const strike = parseNumber(contract.strike, 0);
+        const qty = parseNumber(leg.qty, 0);
+        const multiplier = tws ? getLegMultiplier(tws) : Math.max(1, parseNumber(leg.multiplier || 100, 100));
+        const delta = tws ? parseNumber(tws.greeks?.delta, null) : null;
+        const gamma = tws ? parseNumber(tws.greeks?.gamma, null) : null;
+        const theta = tws ? parseNumber(tws.greeks?.theta, null) : null;
+        const vega  = tws ? parseNumber(tws.greeks?.vega,  null) : null;
+        const dailyPnl = tws ? parseNumber(tws.pnl?.daily, null) : null;
+        const openPnl  = tws ? parseNumber(tws.pnl?.unrealized, null) : null;
+
+        const netDelta = delta != null ? delta * qty * multiplier : null;
+        const netGamma = gamma != null ? gamma * qty * multiplier : null;
+        const netTheta = theta != null ? theta * qty * multiplier : null;
+        const netVega  = vega  != null ? vega  * qty * multiplier : null;
+
+        const qtyColor = qty >= 0 ? '#10b981' : '#f87171';
+        const pnlColor = dailyPnl != null ? (dailyPnl >= 0 ? '#10b981' : '#f87171') : '';
+        const openDesc = strike > 0
+            ? `${contract.expiry ? String(contract.expiry).slice(2) : ''} ${strike}${right}`
+            : formatCurrency(openPnl != null ? openPnl : leg.costBasis, true);
+
+        html += `<tr>
+            <td class="font-mono" title="${escapeHtml(contract.localSymbol || ticker)}">${escapeHtml(ticker)}</td>
+            <td style="color:var(--text-muted)">${typeLabel}</td>
+            <td class="tr font-mono">${escapeHtml(openDesc)}</td>
+            <td class="tr">${netDelta != null ? formatNumber(netDelta, 0) : '—'}</td>
+            <td class="tr">${netGamma != null ? formatNumber(netGamma, 1) : '—'}</td>
+            <td class="tr" style="color:#f59e0b">${netTheta != null ? formatNumber(netTheta, 0) : '—'}</td>
+            <td class="tr" style="color:#d946ef">${netVega != null ? formatNumber(netVega, 0) : '—'}</td>
+            <td class="tr" style="color:${pnlColor}">${dailyPnl != null ? formatCurrency(dailyPnl, true) : '—'}</td>
+        </tr>`;
+    });
+    tbody.innerHTML = html || '<tr><td colspan="8" class="text-center text-muted py-1.5">No live data.</td></tr>';
+
+    // Wire tab buttons (clone to remove stale listeners)
+    strip.querySelectorAll('.risk-pos-tab-btn').forEach(btn => {
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', () => {
+            const tab = newBtn.dataset.tab;
+            strip.querySelectorAll('.risk-pos-tab-btn').forEach(b => b.classList.toggle('active', b === newBtn));
+            const pv = document.getElementById('risk-pos-portfolio-view');
+            const sv = document.getElementById('risk-pos-stats-view');
+            if (pv) pv.classList.toggle('hidden', tab !== 'portfolio');
+            if (sv) sv.classList.toggle('hidden', tab !== 'stats');
+        });
+    });
+
+    // Stats tab: aggregate greeks
+    const statsBody = document.getElementById('risk-pos-stats-body');
+    if (statsBody) {
+        let totD = 0, totG = 0, totT = 0, totV = 0, hasStats = false;
+        legs.forEach(leg => {
+            const tws = portfolioData[leg.conId] || leg.tws_data;
+            const mult = tws ? getLegMultiplier(tws) : Math.max(1, parseNumber(leg.multiplier || 100, 100));
+            const qty = parseNumber(leg.qty, 0);
+            if (tws?.greeks) {
+                totD += parseNumber(tws.greeks.delta, 0) * qty * mult;
+                totG += parseNumber(tws.greeks.gamma, 0) * qty * mult;
+                totT += parseNumber(tws.greeks.theta, 0) * qty * mult;
+                totV += parseNumber(tws.greeks.vega,  0) * qty * mult;
+                hasStats = true;
+            }
+        });
+        statsBody.innerHTML = hasStats
+            ? `<div class="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <div>Δ Delta: <span class="text-primary">${formatNumber(totD, 0)}</span></div>
+                <div>Γ Gamma: <span class="text-primary">${formatNumber(totG, 1)}</span></div>
+                <div style="color:#f59e0b">Θ Theta: <span>${formatNumber(totT, 0)}</span></div>
+                <div style="color:#d946ef">V Vega: <span>${formatNumber(totV, 0)}</span></div>
+               </div>`
+            : '<span class="text-muted">No live Greeks available.</span>';
+    }
+}
+
+// ========================================================================================
+// --- ADJUSTMENT COMPARE PANEL ---
+// ========================================================================================
+function updateAdjustmentComparePanel(price, dataPoints, basis) {
+    const cursorRow = document.getElementById('risk-adjust-cursor-row');
+    const compareEl = document.getElementById('risk-adjust-compare');
+    const compareRows = document.getElementById('risk-adjust-compare-rows');
+    const cursorPriceEl = document.getElementById('risk-adjust-cursor-price');
+
+    if (!riskAdjustmentEnabled || !cursorRow || !compareEl || !compareRows) return;
+
+    if (!price || !dataPoints || dataPoints.length === 0) {
+        cursorRow.classList.add('hidden');
+        compareEl.classList.add('hidden');
+        return;
+    }
+
+    cursorRow.classList.remove('hidden');
+    compareEl.classList.remove('hidden');
+    if (cursorPriceEl) cursorPriceEl.textContent = `$${formatNumber(price, 2)}`;
+
+    let rowsHtml = '';
+    dataPoints.forEach(dp => {
+        const dsLabel = dp.dataset?.label || '—';
+        const val = parseNumber(dp.parsed?.y, 0);
+        const color = dp.dataset?.borderColor || '#94a3b8';
+        const valColor = val >= 0 ? '#10b981' : '#f87171';
+        const pctStr = formatPercentFromBasis(val, basis);
+        // BASE = current value; ADD placeholder shown as '—' (no adjustment added yet)
+        rowsHtml += `<div class="risk-adjust-compare-row">
+            <span style="background:${color}; width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0;"></span>
+            <span class="truncate text-muted">${escapeHtml(dsLabel)}</span>
+            <span class="text-right font-mono" style="color:${valColor}">${formatCurrency(val, true)}</span>
+            <span class="text-right font-mono text-muted">—</span>
+        </div>`;
+    });
+    compareRows.innerHTML = rowsHtml;
 }
 
 // ... (showRiskProfile, drawRiskChart remain mostly the same, ensuring formatters are called) ...
@@ -2717,6 +2942,7 @@ async function showRiskProfile({comboIndex, legs, name, sourceTab}) {
         setupInteractiveControls(targetLegs, data.metrics.days_to_expiry); // Setup AFTER data load
         updateAggregateGreeks(targetLegs);
         updateAggregatePnl(targetLegs);
+        renderRiskPositionStrip(targetLegs, targetName);
 
     } catch (e) {
         document.getElementById('risk-chart-canvas').getContext('2d').clearRect(0,0,300,150);
@@ -2744,12 +2970,12 @@ function drawRiskChart() {
     const ctx = document.getElementById('risk-chart-canvas').getContext('2d');
     const css = getComputedStyle(document.documentElement);
     const colors = {
-        t0: '#38bdf8',
-        exp: '#f8fafc',
-        t1: '#fbbf24',
-        t2: '#f43f5e',
-        t3: '#2563eb',
-        t4: '#84cc16',
+        t0: '#f87171',    // coral/red — most active curve
+        exp: '#e2e8f0',   // near-white for expiry
+        t1: '#fbbf24',    // amber
+        t2: '#34d399',    // emerald
+        t3: '#60a5fa',    // sky blue
+        t4: '#c084fc',    // purple
         text: css.getPropertyValue('--text-primary').trim(),
         textMuted: css.getPropertyValue('--text-muted').trim(),
         zeroLine: css.getPropertyValue('--text-muted').trim(),
@@ -2776,7 +3002,7 @@ function drawRiskChart() {
         borderWidth: 2.8,
         pointRadius: 0,
         tension: 0.24,
-        fill: { target: 'origin', above: 'rgba(56, 189, 248, 0.08)', below: 'rgba(239, 68, 68, 0.08)' }
+        fill: { target: 'origin', above: 'rgba(248, 113, 113, 0.10)', below: 'rgba(248, 113, 113, 0.06)' }
     }];
     const interColors = [colors.t1, colors.t2, colors.t3, colors.t4];
     intermediateCurves.forEach((key, index) => {
@@ -2885,6 +3111,7 @@ function drawRiskChart() {
             el.style.opacity = 0;
             updateRiskCrosshair(spot);
             setRiskCursorChips(null, null, null);
+            updateAdjustmentComparePanel(null, null, null);
             return;
         }
 
@@ -2913,6 +3140,7 @@ function drawRiskChart() {
         el.innerHTML = innerHtml + '</table>';
         updateRiskCrosshair(price);
         setRiskCursorChips(price, tooltip.dataPoints || [], basis);
+        updateAdjustmentComparePanel(price, tooltip.dataPoints || [], basis);
 
         const { offsetLeft: pX, offsetTop: pY } = chart.canvas;
         el.style.opacity = 1;
@@ -3019,6 +3247,7 @@ function drawRiskChart() {
     renderRiskLegsPanel(currentRiskProfileLegs);
     drawRiskStripCharts(priceRange, data.greek_curves, data.t0_pnl_curve, spot);
     updateRiskCrosshair(spot);
+    renderTimeModelLines(riskChart.data.datasets);
 }
 
 
@@ -3034,7 +3263,6 @@ function updateKeyMetrics(m) {
 }
 
 
-// <-- Reverted: Removed all slider logic -->
 function setupInteractiveControls(legs, dte) {
     const ds = document.getElementById('date-slider'), dl = document.getElementById('date-slider-label');
     const is = document.getElementById('iv-slider'), il = document.getElementById('iv-slider-label');
@@ -3043,86 +3271,107 @@ function setupInteractiveControls(legs, dte) {
     const adjustEnabledInput = document.getElementById('risk-adjust-enabled');
     const adjustNote = document.getElementById('risk-adjust-note');
     const ivResetBtn = document.getElementById('iv-reset-btn');
-    ds.max = dte > 0 ? dte : 1;
-    ds.value = 0; dl.textContent = 'T+0'; is.value = 0; il.textContent = '+0%';
-    riskIvEnabled = true;
-    riskTimeEnabled = true;
-    riskAdjustmentEnabled = false;
-    if (ivEnabledInput) ivEnabledInput.checked = riskIvEnabled;
-    if (timeEnabledInput) timeEnabledInput.checked = riskTimeEnabled;
-    if (adjustEnabledInput) adjustEnabledInput.checked = riskAdjustmentEnabled;
-    ds.disabled = dte <= 0 || !riskTimeEnabled;
-    is.disabled = !riskIvEnabled;
-    if (adjustNote) {
-        adjustNote.textContent = 'Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.';
-    }
 
-    const handler = () => {
-        const days = riskTimeEnabled ? parseInt(ds.value) : 0;
-        const ivShift = riskIvEnabled ? (parseInt(is.value) / 100.0) : 0;
-        dl.textContent = `T+${days}`; il.textContent = `${is.value >= 0 ? '+' : ''}${is.value}%`;
+    if (ds) { ds.max = dte > 0 ? dte : 1; ds.value = 0; }
+    if (dl) dl.textContent = 'T+0';
+    if (is) is.value = 0;
+    if (il) il.textContent = '+0%';
+    riskIvEnabled = true; riskTimeEnabled = true; riskAdjustmentEnabled = false;
+    if (ivEnabledInput) ivEnabledInput.checked = true;
+    if (timeEnabledInput) timeEnabledInput.checked = true;
+    if (adjustEnabledInput) adjustEnabledInput.checked = false;
+    if (is) is.disabled = false;
+
+    // IV slider handler — re-fetches first T+N curve with new IV
+    const ivHandler = () => {
+        const days = riskTimeEnabled ? parseInt(ds?.value || 0) : 0;
+        const ivShift = riskIvEnabled ? (parseInt(is?.value || 0) / 100.0) : 0;
+        if (il) il.textContent = `${(is?.value ?? 0) >= 0 ? '+' : ''}${is?.value ?? 0}%`;
         updatePnlCurve(legs, days, ivShift);
     };
-    ds.oninput = handler;
-    is.oninput = handler;
+    if (is) is.oninput = ivHandler;
 
     if (ivEnabledInput) {
-        ivEnabledInput.onchange = () => {
-            riskIvEnabled = !!ivEnabledInput.checked;
-            is.disabled = !riskIvEnabled;
-            if (!riskIvEnabled) {
-                is.value = 0;
-                il.textContent = '+0%';
-            }
-            handler();
+        const newInput = ivEnabledInput.cloneNode(true);
+        ivEnabledInput.parentNode.replaceChild(newInput, ivEnabledInput);
+        newInput.onchange = () => {
+            riskIvEnabled = !!newInput.checked;
+            if (is) is.disabled = !riskIvEnabled;
+            if (!riskIvEnabled && is) { is.value = 0; if (il) il.textContent = '+0%'; }
+            ivHandler();
         };
     }
+
+    // Time toggle — hide/show all intermediate datasets
     if (timeEnabledInput) {
-        timeEnabledInput.onchange = () => {
-            riskTimeEnabled = !!timeEnabledInput.checked;
-            ds.disabled = dte <= 0 || !riskTimeEnabled;
-            if (!riskTimeEnabled) {
-                ds.value = 0;
-                dl.textContent = 'T+0';
+        const newTInput = timeEnabledInput.cloneNode(true);
+        timeEnabledInput.parentNode.replaceChild(newTInput, timeEnabledInput);
+        newTInput.onchange = () => {
+            riskTimeEnabled = !!newTInput.checked;
+            if (riskChart?.data?.datasets) {
+                riskChart.data.datasets.forEach((d, idx) => {
+                    const lbl = String(d.label || '');
+                    if (lbl !== 'T+0' && !lbl.startsWith('Expiry')) {
+                        d.hidden = !riskTimeEnabled;
+                    }
+                });
+                riskChart.update('none');
+                renderTimeModelLines(riskChart.data.datasets);
             }
-            handler();
         };
     }
+
+    // Adjustment toggle
     if (adjustEnabledInput) {
-        adjustEnabledInput.onchange = () => {
-            riskAdjustmentEnabled = !!adjustEnabledInput.checked;
-            if (adjustNote) {
-                adjustNote.textContent = riskAdjustmentEnabled
-                    ? 'Adjustment mode enabled. Compare modeled overlays against baseline lines.'
-                    : 'Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.';
+        const newAInput = adjustEnabledInput.cloneNode(true);
+        adjustEnabledInput.parentNode.replaceChild(newAInput, adjustEnabledInput);
+        newAInput.onchange = () => {
+            riskAdjustmentEnabled = !!newAInput.checked;
+            const cursorRow = document.getElementById('risk-adjust-cursor-row');
+            const compareEl = document.getElementById('risk-adjust-compare');
+            if (!riskAdjustmentEnabled) {
+                if (cursorRow) cursorRow.classList.add('hidden');
+                if (compareEl) compareEl.classList.add('hidden');
             }
+            if (adjustNote) adjustNote.textContent = riskAdjustmentEnabled
+                ? 'Adjustment mode on. Move cursor over chart to compare curves.'
+                : 'Toggle to compare overlaid adjustment curves vs baseline.';
         };
     }
 
-     if (ivResetBtn) {
-         const newIvResetBtn = ivResetBtn.cloneNode(true);
-         ivResetBtn.parentNode.replaceChild(newIvResetBtn, ivResetBtn);
-         newIvResetBtn.onclick = () => { is.value = 0; handler(); };
-     }
+    // Clear All button for adjustment panel
+    const adjustClearBtn = document.getElementById('risk-adjust-clear-btn');
+    if (adjustClearBtn) {
+        const newClearBtn = adjustClearBtn.cloneNode(true);
+        adjustClearBtn.parentNode.replaceChild(newClearBtn, adjustClearBtn);
+        newClearBtn.onclick = () => {
+            const compareEl = document.getElementById('risk-adjust-compare');
+            const cursorRow = document.getElementById('risk-adjust-cursor-row');
+            if (compareEl) compareEl.classList.add('hidden');
+            if (cursorRow) cursorRow.classList.add('hidden');
+        };
+    }
 
-     // Ensure chart zoom reset button uses the plugin's resetZoom
-     const resetButton = document.getElementById('reset-zoom-btn');
-     if (resetButton) {
-         const newResetButton = resetButton.cloneNode(true);
-         resetButton.parentNode.replaceChild(newResetButton, resetButton);
-         newResetButton.addEventListener('click', () => {
-              try {
-                 if (riskChart && riskChart.resetZoom) {
-                     riskChart.resetZoom('none');
-                     console.log("Zoom Reset via button (using plugin reset)");
-                 } else {
-                      console.warn("resetZoom function not found on chart object during button click.");
-                 }
-              } catch(e) {
-                   console.error("Error resetting zoom via button:", e);
-              }
-         });
-     }
+    if (ivResetBtn) {
+        const newIvResetBtn = ivResetBtn.cloneNode(true);
+        ivResetBtn.parentNode.replaceChild(newIvResetBtn, ivResetBtn);
+        newIvResetBtn.onclick = () => { if (is) { is.value = 0; ivHandler(); } };
+    }
+
+    const resetButton = document.getElementById('reset-zoom-btn');
+    if (resetButton) {
+        const newResetButton = resetButton.cloneNode(true);
+        resetButton.parentNode.replaceChild(newResetButton, resetButton);
+        newResetButton.addEventListener('click', () => {
+            try { if (riskChart?.resetZoom) riskChart.resetZoom('none'); }
+            catch(e) { console.error('Error resetting zoom:', e); }
+        });
+    }
+
+    // Populate time model lines from current chart
+    if (riskChart?.data?.datasets) {
+        renderTimeModelLines(riskChart.data.datasets);
+    }
 }
 
 
@@ -3159,6 +3408,7 @@ async function updatePnlCurve(legs, days, iv_shift) {
                 currentRiskCrosshairPrice ?? spot
             );
             updateRiskCrosshair(currentRiskCrosshairPrice ?? spot);
+            renderTimeModelLines(riskChart.data.datasets);
         } else { console.warn("Could not find T+N dataset to update."); }
     } catch(e) { console.error("Curve update failed:", e); }
 }

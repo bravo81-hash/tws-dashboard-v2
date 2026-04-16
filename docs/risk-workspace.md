@@ -16,22 +16,37 @@ Both routes open the same `risk-panel` and keep the source tab active.
 
 The shared risk workspace is designed as a workstation-style two-column view:
 
-- Left rail
-- `Options Chain` card (symbol/expiry-derived, live fetch via `/option_chain`)
-- `IV Modeling`
-- `Time Modeling`
-- `Adjustment Modeling`
+- **Left rail** (`295–335px`)
+  - `Options Chain` card (symbol/expiry-derived, live fetch via `/option_chain`)
+  - `IV Modeling`
+  - `Time Modeling` — per-curve date rows (not a single slider); appears after chart loads
+  - `Adjustment Modeling` — BASE/ADD compare table at cursor price
 
-- Right workspace
-- `Modeled Portfolio Exposure` chart
-- Curves/selected-leg overlays
-- Greek strips and aggregate row
+- **Right workspace**
+  - `Modeled Portfolio Exposure` chart (`clamp(440px, 62vh, 800px)` tall)
+  - `Selected Legs` overlay — absolute-positioned top-right corner of the chart; visible on all screens ≥769px wide
+  - Greek strips (P&L, Delta, Theta, Vega) — full-width sparklines with meta overlay
+  - Aggregate row (hidden when fewer than 2 combos selected)
+  - Position strip (Portfolio / Stats tabs)
 
 Additional data views remain available via toolbar tabs:
 
 - `Risk Graph`
 - `Risk Table`
 - `SGPV Sim`
+
+## Overlay Panels
+
+Only the **Selected Legs** overlay (`#risk-legs-panel`) remains — it sits absolute top-right on the chart canvas and does not reduce chart height.
+
+The former **Curves @ Spot** overlay (`#risk-curve-panel`) was removed; identical values are already shown in the interactive tooltip.
+
+## Theme
+
+The app uses a neutral dark charcoal theme throughout:
+- `--bg-primary: #0d1117` / `--bg-secondary: #13191f` / `--bg-tertiary: #1a2130`
+- Body background-image gradients are near-invisible (4–5% opacity)
+- Risk curve colors: T+0 coral `#f87171`, T+1 amber `#fbbf24`, T+2 emerald `#34d399`, T+3 sky `#60a5fa`
 
 ## Data Handling
 

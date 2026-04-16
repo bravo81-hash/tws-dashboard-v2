@@ -22,22 +22,22 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
     <style>
         :root {
-            --bg-primary: #0a111f;
-            --bg-secondary: #111d33;
-            --bg-tertiary: #1b2a45;
-            --bg-hover: #243856;
-            --text-primary: #eef4ff;
-            --text-secondary: #ccd9f0;
-            --text-muted: #8ea2c4;
-            --border-color: #2a3f63;
-            --input-bg: #16243d;
-            --input-border: #35507a;
+            --bg-primary: #0d1117;
+            --bg-secondary: #13191f;
+            --bg-tertiary: #1a2130;
+            --bg-hover: #212c3d;
+            --text-primary: #e6ecf4;
+            --text-secondary: #a8b6c8;
+            --text-muted: #6b7a8d;
+            --border-color: #252e3c;
+            --input-bg: #111821;
+            --input-border: #2c3848;
             --button-primary-bg: #0ea5e9;
             --button-primary-hover: #0284c7;
-            --button-secondary-bg: #223453;
-            --button-secondary-hover: #2d4670;
-            --accent-glow: rgba(14, 165, 233, 0.24);
-            --modal-overlay: rgba(2, 9, 20, 0.78);
+            --button-secondary-bg: #1e2d40;
+            --button-secondary-hover: #28394f;
+            --accent-glow: rgba(14, 165, 233, 0.20);
+            --modal-overlay: rgba(2, 6, 14, 0.84);
         }
 
         .light-mode {
@@ -65,8 +65,8 @@
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
             background-image:
-                radial-gradient(1200px 580px at 5% -5%, rgba(14, 165, 233, 0.16), transparent 45%),
-                radial-gradient(980px 420px at 92% -10%, rgba(37, 99, 235, 0.14), transparent 45%);
+                radial-gradient(1400px 500px at 5% 0%, rgba(14, 165, 233, 0.05), transparent 50%),
+                radial-gradient(1200px 400px at 95% 0%, rgba(37, 99, 235, 0.04), transparent 50%);
             background-attachment: fixed;
             min-height: 100vh;
         }
@@ -211,14 +211,14 @@
             position: relative;
             width: 100%;
             max-width: 100%;
-            height: clamp(380px, 56vh, 730px);
-            min-height: 380px;
+            height: clamp(420px, 60vh, 760px);
+            min-height: 420px;
             border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
             border-radius: 0.75rem;
             overflow: hidden;
             background:
-                radial-gradient(900px 300px at 50% -5%, color-mix(in srgb, var(--button-primary-bg) 22%, transparent), transparent 56%),
-                linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-primary) 28%), var(--bg-primary));
+                radial-gradient(900px 300px at 50% -5%, color-mix(in srgb, var(--button-primary-bg) 18%, transparent), transparent 56%),
+                linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 70%, var(--bg-primary) 30%), var(--bg-primary));
             box-shadow:
                 inset 0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent),
                 0 16px 42px rgba(2, 10, 24, 0.32);
@@ -498,52 +498,57 @@
             background: color-mix(in srgb, var(--button-primary-bg) 22%, var(--bg-secondary) 78%);
             color: color-mix(in srgb, var(--text-primary) 88%, #ffffff 12%);
         }
+        /* ===== STRIP CARDS — full-width overlay style ===== */
         .risk-strip-card {
-            border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
-            border-radius: 0.55rem;
-            background: color-mix(in srgb, var(--bg-secondary) 82%, #ffffff 18%);
-            padding: 0.3rem 0.45rem;
-            display: grid;
-            grid-template-columns: 120px minmax(0, 1fr);
-            align-items: center;
-            gap: 0.4rem;
-            min-height: 54px;
+            position: relative;
+            border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+            border-radius: 0.52rem;
+            background: color-mix(in srgb, var(--bg-primary) 82%, #000 18%);
+            overflow: hidden;
+            min-height: 68px;
+            padding: 0;
+            display: block;
         }
-        #risk-greek-strips { grid-template-columns: 1fr !important; gap: 0.35rem !important; }
+        #risk-greek-strips { grid-template-columns: 1fr !important; gap: 0.3rem !important; }
         .risk-strip-meta {
+            position: absolute;
+            top: 7px;
+            left: 10px;
+            z-index: 10;
+            pointer-events: none;
             display: flex;
             flex-direction: column;
-            gap: 0.05rem;
-            min-width: 0;
+            gap: 0.12rem;
         }
         .risk-strip-label {
-            color: var(--text-muted);
+            color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-size: 10px;
-            font-weight: 700;
-            margin-bottom: 0;
+            letter-spacing: 0.07em;
+            font-size: 9px;
+            font-weight: 800;
+            line-height: 1;
         }
         .risk-strip-value {
             font-family: 'IBM Plex Mono', monospace;
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
             line-height: 1.1;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
         .risk-strip-card canvas {
             width: 100% !important;
-            height: 38px !important;
-            min-height: 38px;
-            max-height: 38px;
+            height: 68px !important;
+            min-height: 68px;
+            max-height: 68px;
             display: block;
         }
-        @media (max-width: 1024px) {
+        @media (max-width: 768px) {
             .risk-overlay-right { display: none; }
             .risk-overlay-left { max-width: min(92vw, 360px); }
+        }
+        @media (min-width: 769px) and (max-width: 1200px) {
+            .risk-overlay-right { max-width: min(220px, 28vw); font-size: 10px; }
         }
 
         .sortable-header { cursor: pointer; user-select: none; }
@@ -753,8 +758,8 @@
         }
         #risk-panel #risk-graph-view {
             display: grid;
-            grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
-            gap: 0.65rem;
+            grid-template-columns: minmax(295px, 335px) minmax(0, 1fr);
+            gap: 0.6rem;
             align-items: start;
         }
         #risk-panel #risk-modeling-pane {
@@ -953,7 +958,7 @@
             border-radius: 0.38rem;
         }
         #risk-panel .risk-chart-shell {
-            height: clamp(400px, 58vh, 750px);
+            height: clamp(440px, 62vh, 800px);
         }
         #risk-panel #key-metrics,
         #risk-panel #risk-table-summary,
@@ -997,12 +1002,10 @@
             line-height: 1.05;
         }
         #risk-panel .risk-strip-card {
-            min-height: 48px;
-            padding: 0.24rem 0.42rem;
-            grid-template-columns: 106px minmax(0, 1fr);
+            min-height: 68px;
         }
         #risk-panel .risk-strip-value {
-            font-size: 10px;
+            font-size: 13px;
         }
         #risk-panel #risk-graph-view .input-styles,
         #risk-panel #risk-table-view .input-styles,
@@ -1079,6 +1082,127 @@
                 height: 5px;
             }
         }
+
+        /* ===== TIME MODEL DATE LINE ROWS ===== */
+        .risk-time-line-row {
+            display: grid;
+            grid-template-columns: 9px 13px 1fr auto auto;
+            align-items: center;
+            gap: 0.36rem;
+            padding: 0.28rem 0.38rem;
+            border: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
+            border-radius: 0.42rem;
+            background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+            transition: opacity 0.2s;
+        }
+        .risk-time-line-hidden { opacity: 0.38; }
+        .risk-time-dot {
+            width: 9px; height: 9px; border-radius: 9999px; flex-shrink: 0; display: block;
+        }
+        .risk-time-cal-icon {
+            width: 12px; height: 12px; color: var(--text-muted); flex-shrink: 0;
+        }
+        .risk-time-date-input {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            font-family: 'IBM Plex Mono', monospace !important;
+            font-size: 10px !important;
+            min-height: auto !important;
+            color: var(--text-secondary) !important;
+            width: 100%;
+            min-width: 0;
+        }
+        .risk-time-date-input::-webkit-calendar-picker-indicator {
+            filter: invert(0.62) brightness(1.1);
+            cursor: pointer;
+            width: 10px;
+            height: 10px;
+            margin: 0;
+        }
+        .light-mode .risk-time-date-input::-webkit-calendar-picker-indicator { filter: none; }
+        .risk-time-date-input:focus { outline: 1px solid var(--button-primary-bg); box-shadow: none !important; }
+        .risk-time-days-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px; font-weight: 700;
+            color: var(--text-muted);
+            background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
+            border: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
+            border-radius: 9999px;
+            padding: 0.09rem 0.32rem;
+            white-space: nowrap; line-height: 1.3;
+        }
+        .risk-time-toggle-btn {
+            background: transparent !important; border: none !important;
+            color: var(--text-muted); cursor: pointer;
+            padding: 0 0.18rem !important; min-height: auto !important;
+            line-height: 1; font-size: 13px; transition: color 0.15s;
+        }
+        .risk-time-toggle-btn:hover { color: var(--text-primary) !important; background: transparent !important; }
+        .risk-time-legend-dots { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        /* ===== ADJUSTMENT MODELING ENHANCEMENTS ===== */
+        .risk-adjust-clear-btn {
+            background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent) !important;
+            border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent) !important;
+            color: var(--text-muted) !important; font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px !important; font-weight: 700; letter-spacing: 0.04em;
+            text-transform: uppercase; padding: 0.14rem 0.4rem !important;
+            min-height: auto !important; border-radius: 0.3rem; cursor: pointer;
+        }
+        .risk-adjust-clear-btn:hover { color: var(--text-primary) !important; }
+        .risk-adjust-compare-head {
+            display: grid; grid-template-columns: 10px 1fr 58px 58px;
+            gap: 0.34rem; font-size: 9px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted);
+            padding: 0.1rem 0.28rem 0.2rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+        }
+        .risk-adjust-compare-row {
+            display: grid; grid-template-columns: 10px 1fr 58px 58px;
+            align-items: center; gap: 0.34rem;
+            font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+            padding: 0.17rem 0.28rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 28%, transparent);
+        }
+        .risk-adjust-compare-row:last-child { border-bottom: none; }
+        /* ===== POSITION STRIP ===== */
+        #risk-panel #risk-position-strip { grid-column: 2; }
+        #risk-position-strip {
+            border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+            border-radius: 0.62rem;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, #ffffff 12%);
+            padding: 0.5rem 0.58rem;
+        }
+        .risk-pos-tab-btn {
+            font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 0.17rem 0.42rem !important; border-radius: 0.32rem;
+            background: transparent !important; border: 1px solid transparent !important;
+            color: var(--text-muted); cursor: pointer; min-height: auto !important;
+            transition: all 0.15s;
+        }
+        .risk-pos-tab-btn.active {
+            background: color-mix(in srgb, var(--button-primary-bg) 20%, transparent) !important;
+            border-color: color-mix(in srgb, var(--button-primary-bg) 50%, transparent) !important;
+            color: var(--text-primary) !important;
+        }
+        .risk-pos-table { font-family: 'IBM Plex Mono', monospace; font-size: 11px; border-collapse: collapse; width: 100%; }
+        .risk-pos-table thead th {
+            text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em;
+            color: var(--text-muted); padding: 0.2rem 0.35rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
+            white-space: nowrap; font-weight: 700; text-align: left;
+        }
+        .risk-pos-table thead th.tr { text-align: right; }
+        .risk-pos-table tbody td {
+            padding: 0.2rem 0.35rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 30%, transparent);
+            color: var(--text-secondary); white-space: nowrap;
+        }
+        .risk-pos-table tbody tr:last-child td { border-bottom: none; }
+        .risk-pos-table tbody tr:hover td { background: color-mix(in srgb, var(--bg-hover) 38%, transparent); }
+        .risk-pos-table td.tr, .risk-pos-table th.tr { text-align: right; }
 
         /* Theme Switch */
         .theme-switch-wrapper { display: flex; align-items: center; }
@@ -1453,7 +1577,6 @@
                     <div class="relative risk-chart-shell">
                         <canvas id="risk-chart-canvas"></canvas>
                         <div id="chart-tooltip"></div>
-                        <div id="risk-curve-panel" class="risk-overlay-panel risk-overlay-left"></div>
                         <div id="risk-legs-panel" class="risk-overlay-panel risk-overlay-right"></div>
                         <div id="risk-cursor-chips" class="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1.5 pointer-events-none"></div>
                     </div>
@@ -1515,33 +1638,54 @@
                         </div>
                         <div class="risk-model-card space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div>
-                                    <div class="label">Time Modeling</div>
-                                    <div class="text-xs text-muted">Project the curve to a forward horizon.</div>
-                                </div>
+                                <div class="label">Time Modeling</div>
                                 <label class="mini-switch">
                                     <input id="risk-time-enabled" type="checkbox" checked>
                                     <span class="mini-slider"></span>
                                 </label>
                             </div>
-                            <div class="flex items-center justify-between gap-2 text-xs text-muted">
-                                <label for="date-slider">Target Date</label>
-                                <span id="date-slider-label" class="font-mono px-1.5 py-0.5 rounded-md text-xs">T+0</span>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[9px] uppercase tracking-wide text-muted font-bold">Target Date Lines</span>
+                                <span id="risk-time-legend-dots" class="risk-time-legend-dots"></span>
                             </div>
-                            <input type="range" id="date-slider" min="0" max="1" value="0">
+                            <div id="risk-time-lines" class="space-y-1.5">
+                                <div class="text-[10px] text-muted px-0.5">Load a risk profile to see time curves.</div>
+                            </div>
+                            <div class="builder-model-note text-[10px] flex items-start gap-1.5 mt-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="risk-time-cal-icon mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span>Dates are computed from today. Edit a date or click × to hide a curve.</span>
+                            </div>
+                            <input type="range" id="date-slider" min="0" max="1" value="0" class="hidden">
+                            <span id="date-slider-label" class="hidden">T+0</span>
                         </div>
                         <div class="risk-model-card space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div>
-                                    <div class="label">Adjustment Modeling</div>
-                                    <div class="text-xs text-muted">Compare active curve versus baseline behavior.</div>
+                                <div class="label">Adjustment Modeling</div>
+                                <div class="flex items-center gap-2">
+                                    <button id="risk-adjust-clear-btn" class="risk-adjust-clear-btn" type="button">Clear All</button>
+                                    <label class="mini-switch">
+                                        <input id="risk-adjust-enabled" type="checkbox">
+                                        <span class="mini-slider"></span>
+                                    </label>
                                 </div>
-                                <label class="mini-switch">
-                                    <input id="risk-adjust-enabled" type="checkbox">
+                            </div>
+                            <div id="risk-adjust-cursor-row" class="hidden text-[11px] font-mono text-muted leading-tight">
+                                P&L @ <span id="risk-adjust-cursor-price" class="text-secondary font-semibold">—</span>
+                            </div>
+                            <div id="risk-adjust-compare" class="hidden space-y-0.5">
+                                <div class="risk-adjust-compare-head">
+                                    <span></span><span>Curve</span><span class="text-right">BASE</span><span class="text-right">ADD</span>
+                                </div>
+                                <div id="risk-adjust-compare-rows"></div>
+                            </div>
+                            <div class="flex items-center gap-2 pt-0.5">
+                                <label class="mini-switch flex-shrink-0">
+                                    <input id="risk-adjust-show-baseline" type="checkbox" checked>
                                     <span class="mini-slider"></span>
                                 </label>
+                                <span class="text-[10px] text-muted">Show baseline curves</span>
                             </div>
-                            <div id="risk-adjust-note" class="builder-model-note">Toggle for side-by-side adjustment overlays. Baseline curve remains enabled by default.</div>
+                            <div id="risk-adjust-note" class="builder-model-note">Toggle to compare overlaid adjustment curves vs baseline.</div>
                         </div>
                     </div>
 
@@ -1570,6 +1714,38 @@
                              <div id="aggregate-pnl" class="flex items-center gap-x-3"></div>
                          </div>
                         <button id="reset-zoom-btn" class="btn-secondary text-xs">Reset Zoom</button>
+                    </div>
+
+                    <!-- Position Strip: shows active profile legs below chart -->
+                    <div id="risk-position-strip" class="hidden">
+                        <div class="flex items-center gap-1.5 mb-1.5 pb-1.5 border-b" style="border-color: color-mix(in srgb, var(--border-color) 55%, transparent);">
+                            <button class="risk-pos-tab-btn active" data-tab="portfolio" type="button">Portfolio</button>
+                            <button class="risk-pos-tab-btn" data-tab="stats" type="button">Stats</button>
+                            <span class="flex-1"></span>
+                            <span class="text-[10px] text-muted font-mono truncate" id="risk-pos-name-label">—</span>
+                        </div>
+                        <div id="risk-pos-portfolio-view" class="overflow-x-auto">
+                            <table class="risk-pos-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Type</th>
+                                        <th class="tr">Open</th>
+                                        <th class="tr">Delta</th>
+                                        <th class="tr">Gamma</th>
+                                        <th class="tr">Theta</th>
+                                        <th class="tr">Vega</th>
+                                        <th class="tr">P&amp;L</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="risk-pos-table-body">
+                                    <tr><td colspan="8" class="text-center text-muted py-2">No positions loaded.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="risk-pos-stats-view" class="hidden pt-1">
+                            <div id="risk-pos-stats-body" class="text-[11px] text-muted font-mono">—</div>
+                        </div>
                     </div>
                 </div>
 
